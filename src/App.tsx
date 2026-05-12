@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import type { Screen } from './types';
 import BottomNav from './components/BottomNav';
-import Home from './screens/Home';
 import Attendance from './screens/Attendance';
 import History from './screens/History';
 import Employees from './screens/Employees';
@@ -15,12 +14,10 @@ import Reports from './screens/Reports';
 import Settings from './screens/Settings';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
+  const [currentScreen, setCurrentScreen] = useState<Screen>('attendance');
 
   const renderScreen = () => {
     switch (currentScreen) {
-      case 'home':
-        return <Home key="home" />;
       case 'attendance':
         return <Attendance key="attendance" />;
       case 'history':
@@ -32,7 +29,7 @@ export default function App() {
       case 'settings':
         return <Settings key="settings" />;
       default:
-        return <Home key="home" />;
+        return <Attendance key="attendance" />;
     }
   };
 

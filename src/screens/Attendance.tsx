@@ -141,7 +141,7 @@ export default function Attendance() {
           <button className="p-2 -ml-2 hover:bg-surface-container rounded-full transition-colors active:scale-90">
             <ArrowLeft size={20} className="text-primary" />
           </button>
-          <h1 className="text-xl font-bold text-primary tracking-tight">Chấm công</h1>
+          <h1 className="text-xl font-bold text-primary tracking-tight">Trang chủ</h1>
         </div>
         <button className="p-2 hover:bg-surface-container rounded-full transition-colors active:scale-90 relative">
           <Bell size={20} className="text-primary" />

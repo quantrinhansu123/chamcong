@@ -1,4 +1,4 @@
-import { Home, Fingerprint, Users, BarChart2, Settings } from 'lucide-react';
+import { Home, Users, BarChart2, Settings } from 'lucide-react';
 import type { Screen } from '../types';
 
 interface BottomNavProps {
@@ -8,8 +8,7 @@ interface BottomNavProps {
 
 export default function BottomNav({ currentScreen, setScreen }: BottomNavProps) {
   const items = [
-    { id: 'home' as Screen, label: 'Trang chủ', icon: Home },
-    { id: 'attendance' as Screen, label: 'Chấm công', icon: Fingerprint },
+    { id: 'attendance' as Screen, label: 'Trang chủ', icon: Home },
     { id: 'employees' as Screen, label: 'Nhân sự', icon: Users },
     { id: 'reports' as Screen, label: 'Báo cáo', icon: BarChart2 },
     { id: 'settings' as Screen, label: 'Cài đặt', icon: Settings },
