@@ -8,7 +8,7 @@ interface BottomNavProps {
 
 export default function BottomNav({ currentScreen, setScreen }: BottomNavProps) {
   const items = [
-    { id: 'attendance' as Screen, label: 'Trang chủ', icon: Home },
+    { id: 'home' as Screen, label: 'Trang chủ', icon: Home },
     { id: 'employees' as Screen, label: 'Nhân sự', icon: Users },
     { id: 'reports' as Screen, label: 'Báo cáo', icon: BarChart2 },
     { id: 'settings' as Screen, label: 'Cài đặt', icon: Settings },
