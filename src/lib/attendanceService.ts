@@ -16,21 +16,49 @@ function generateAnonymousId() {
   return 'ANON_' + Math.random().toString(36).substring(2, 11).toUpperCase();
 }
 
-// Get or create employee from localStorage
+function buildConfiguredEmployee() {
+  const configuredId = EMPLOYEE_ID || EMPLOYEE_PHONE || '';
+  const configuredName = EMPLOYEE_NAME || EMPLOYEE_PHONE || '';
+
+  if (!configuredId && !configuredName) {
+    return null;
+  }
+
+  return {
+    id: configuredId || generateAnonymousId(),
+    name: configuredName || `User ${new Date().getTime().toString().slice(-6)}`,
+    phone: EMPLOYEE_PHONE || undefined,
+  };
+}
+
+// Get or create employee from localStorage, but always prefer configured env identity.
 function getOrCreateEmployee() {
+  const configuredEmployee = buildConfiguredEmployee();
+
   try {
     const stored = localStorage.getItem('employee_info');
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+
+      if (configuredEmployee) {
+        const mergedEmployee = {
+          ...parsed,
+          ...configuredEmployee,
+        };
+        localStorage.setItem('employee_info', JSON.stringify(mergedEmployee));
+        return mergedEmployee;
+      }
+
+      return parsed;
     }
   } catch (e) {
     console.error('Failed to parse stored employee info:', e);
   }
 
-  const newEmployee = {
-    id: EMPLOYEE_ID || EMPLOYEE_PHONE || generateAnonymousId(),
-    name: EMPLOYEE_NAME || EMPLOYEE_PHONE || `User ${new Date().getTime().toString().slice(-6)}`,
-    phone: EMPLOYEE_PHONE || undefined,
+  const newEmployee = configuredEmployee || {
+    id: generateAnonymousId(),
+    name: `User ${new Date().getTime().toString().slice(-6)}`,
+    phone: undefined,
   };
   localStorage.setItem('employee_info', JSON.stringify(newEmployee));
   return newEmployee;
@@ -41,6 +69,10 @@ export const currentEmployee = getOrCreateEmployee();
 export async function saveEmployeeToSupabase() {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  if (!currentEmployee.id || !currentEmployee.name) {
+    return null;
   }
 
   const { data, error } = await supabase
@@ -125,6 +157,23 @@ export async function getTodayAttendance() {
 
   if (error) throw error;
   return data;
+}
+
+export async function getAttendanceRecordsInRange(startDate: string, endDate: string) {
+  if (!supabase) {
+    throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('*')
+    .gte('work_date', startDate)
+    .lte('work_date', endDate)
+    .order('work_date', { ascending: true })
+    .order('employee_name', { ascending: true });
+
+  if (error) throw error;
+  return data as AttendanceDbRecord[];
 }
 
 export async function checkIn(location: GeoPoint) {

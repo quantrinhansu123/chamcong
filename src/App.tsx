@@ -19,17 +19,17 @@ export default function App() {
   const renderScreen = () => {
     switch (currentScreen) {
       case 'home':
-        return <Home key="home" setScreen={setCurrentScreen} />;
+        return <Home setScreen={setCurrentScreen} />;
       case 'history':
-        return <History key="history" />;
+        return <History />;
       case 'employees':
-        return <Employees key="employees" />;
+        return <Employees />;
       case 'reports':
-        return <Reports key="reports" />;
+        return <Reports />;
       case 'settings':
-        return <Settings key="settings" />;
+        return <Settings />;
       default:
-        return <Home key="home" setScreen={setCurrentScreen} />;
+        return <Home setScreen={setCurrentScreen} />;
     }
   };
 

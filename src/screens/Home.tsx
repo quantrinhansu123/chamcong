@@ -22,7 +22,6 @@ import {
   getBrowserLocation,
   getTodayAttendance,
   saveTodayLocation,
-  saveEmployeeToSupabase,
 } from '../lib/attendanceService';
 
 const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -77,18 +76,10 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
       return;
     }
 
-    // Auto-save employee to Supabase on first load
-    saveEmployeeToSupabase()
-      .then(() => {
-        getTodayAttendance()
-          .then(setRecord)
-          .catch((err) => setError(err.message || 'Không tải được dữ liệu chấm công.'))
-          .finally(() => setLoading(false));
-      })
-      .catch((err) => {
-        console.error('Failed to save employee:', err);
-        setLoading(false);
-      });
+    getTodayAttendance()
+      .then(setRecord)
+      .catch((err) => setError(err.message || 'Không tải được dữ liệu chấm công.'))
+      .finally(() => setLoading(false));
   }, []);
 
   const duration = useMemo(
