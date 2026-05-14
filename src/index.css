@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-primary: #001410;
+  --color-primary-container: #062b24;
+  --color-primary-fixed: #c5eadf;
+  --color-primary-fixed-dim: #aacec3;
+  
+  --color-secondary: #755b02;
+  --color-secondary-container: #fed97b;
+  --color-secondary-fixed: #ffdf91;
+  
+  --color-surface: #faf9f7;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f4f2;
+  --color-surface-container: #eeeeec;
+  --color-surface-container-high: #e8e8e6;
+  --color-surface-container-highest: #e3e2e1;
+  
+  --color-on-surface: #1a1c1b;
+  --color-on-surface-variant: #414846;
+  --color-outline: #717976;
+  --color-outline-variant: #c1c8c5;
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--color-surface)] text-[var(--color-on-surface)] antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(6, 43, 36, 0.08);
+  border: 1px solid rgba(193, 200, 197, 0.2);
+}
+
+.ambient-shadow {
+  box-shadow: 0 8px 24px rgba(6, 43, 36, 0.04), 0 2px 8px rgba(6, 43, 36, 0.02);
+}
+
+.header-bg {
+  background-color: var(--color-primary-container);
+  border-bottom-left-radius: 2rem;
+  border-bottom-right-radius: 2rem;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
