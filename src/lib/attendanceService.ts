@@ -55,6 +55,12 @@ export async function saveEmployeeToSupabase() {
   return data;
 }
 
+export function clearCurrentEmployee() {
+  localStorage.removeItem('employee_info');
+  currentEmployee.id = '';
+  currentEmployee.name = '';
+}
+
 export function getTodayKey(date = new Date()) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
