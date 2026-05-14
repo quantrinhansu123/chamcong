@@ -7,6 +7,10 @@ const DEFAULT_SHIFT = {
   scheduled_end: '17:30',
 };
 
+const EMPLOYEE_ID = (import.meta.env.VITE_EMPLOYEE_ID as string | undefined) || '';
+const EMPLOYEE_NAME = (import.meta.env.VITE_EMPLOYEE_NAME as string | undefined) || '';
+const EMPLOYEE_PHONE = (import.meta.env.VITE_EMPLOYEE_PHONE as string | undefined) || '';
+
 // Generate anonymous employee ID
 function generateAnonymousId() {
   return 'ANON_' + Math.random().toString(36).substring(2, 11).toUpperCase();
@@ -23,10 +27,10 @@ function getOrCreateEmployee() {
     console.error('Failed to parse stored employee info:', e);
   }
 
-  // Create new anonymous employee
   const newEmployee = {
-    id: generateAnonymousId(),
-    name: `User ${new Date().getTime().toString().slice(-6)}`,
+    id: EMPLOYEE_ID || EMPLOYEE_PHONE || generateAnonymousId(),
+    name: EMPLOYEE_NAME || EMPLOYEE_PHONE || `User ${new Date().getTime().toString().slice(-6)}`,
+    phone: EMPLOYEE_PHONE || undefined,
   };
   localStorage.setItem('employee_info', JSON.stringify(newEmployee));
   return newEmployee;

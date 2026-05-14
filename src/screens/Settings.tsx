@@ -47,7 +47,9 @@ export default function Settings() {
         </div>
         <div className="flex flex-col gap-1 min-w-0">
           <h2 className="text-xl font-bold text-primary truncate leading-tight">{currentEmployee.name}</h2>
-          <p className="text-[13px] font-medium text-on-surface-variant/80 truncate">{currentEmployee.id}</p>
+          <p className="text-[13px] font-medium text-on-surface-variant/80 truncate">
+            {currentEmployee.phone || currentEmployee.id}
+          </p>
         </div>
       </div>
 
