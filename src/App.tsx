@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import type { Screen } from './types';
 import BottomNav from './components/BottomNav';
+import EmployeeIdentityGate from './components/EmployeeIdentityGate';
 import Home from './screens/Home';
 import History from './screens/History';
 import Employees from './screens/Employees';
@@ -34,19 +35,21 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col items-center">
-      <div className="w-full max-w-lg min-h-screen bg-surface relative flex flex-col">
-        <main className="flex-1 px-5 pt-2 pb-24 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {renderScreen()}
-          </AnimatePresence>
-        </main>
-        
-        <BottomNav 
-          currentScreen={currentScreen} 
-          setScreen={setCurrentScreen} 
-        />
+    <EmployeeIdentityGate>
+      <div className="min-h-screen bg-surface flex flex-col items-center">
+        <div className="w-full max-w-lg min-h-screen bg-surface relative flex flex-col">
+          <main className="flex-1 px-5 pt-2 pb-24 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              {renderScreen()}
+            </AnimatePresence>
+          </main>
+          
+          <BottomNav 
+            currentScreen={currentScreen} 
+            setScreen={setCurrentScreen} 
+          />
+        </div>
       </div>
-    </div>
+    </EmployeeIdentityGate>
   );
 }

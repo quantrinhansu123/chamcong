@@ -9,6 +9,7 @@
 ## Chức năng hiện có
 
 - `Trang chủ`:
+  - nhập `Mã nhân viên` và `Tên nhân viên` lần đầu trên từng máy/browser
   - `CHECK-IN`
   - `CHECK-OUT`
   - lưu `GPS`
@@ -44,8 +45,6 @@ Yêu cầu: `Node.js`
 ```env
 VITE_SUPABASE_URL="https://YOUR_PROJECT_ID.supabase.co"
 VITE_SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
-VITE_EMPLOYEE_ID="1"
-VITE_EMPLOYEE_NAME="Nguyễn Văn An"
 ```
 
 5. Restart `npm run dev`.
@@ -58,17 +57,20 @@ App ghi vào bảng `attendance_records`:
 - `CHECK-OUT`: `check_out_at`, `check_out_lat`, `check_out_lng`
 - `GPS`: `last_lat`, `last_lng`, `location_accuracy_m`, `location_captured_at`
 
-## Dùng trên nhiều máy
+## Dùng trên nhiều người/máy
 
-Nếu muốn cùng một nhân viên check-in/check-out được trên nhiều máy khác nhau, tất cả máy phải dùng cùng:
+Khi người dùng mở app lần đầu, app sẽ yêu cầu nhập:
 
-- `VITE_EMPLOYEE_ID`
-- `VITE_EMPLOYEE_NAME`
+- `Mã nhân viên`
+- `Tên nhân viên`
 
-App hiện ưu tiên danh tính từ env này để tránh sinh user ảo `ANON_*` theo từng browser.
+Thông tin này được lưu trong `localStorage` của từng browser. Vì vậy nhiều người có thể cùng mở link Vercel và check-in/check-out riêng trong cùng ngày, miễn là mỗi người dùng một mã khác nhau.
+
+Nếu muốn đổi người test trên cùng một máy, vào `Cài đặt` rồi bấm `Đăng xuất`. Sau đó nhập mã/tên mới.
 
 ## Lưu ý
 
 - `Báo cáo` hiện đọc trực tiếp từ `attendance_records`, không còn dùng số hard-code.
 - `.env.local` đang được track trong repo hiện tại để các máy khác clone về có thể chạy ngay với cùng Supabase project.
+- `VITE_EMPLOYEE_ID` và `VITE_EMPLOYEE_NAME` chỉ còn là gợi ý/placeholder, không tự áp vào tất cả người dùng.
 - `anon key` là key frontend public, nhưng project demo hiện vẫn nên siết lại `RLS policy` trước khi dùng production thật.
