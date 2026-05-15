@@ -18,9 +18,23 @@ export interface EmployeeIdentity {
   phone?: string;
 }
 
-// Generate anonymous employee ID
 function generateAnonymousId() {
   return 'ANON_' + Math.random().toString(36).substring(2, 11).toUpperCase();
+}
+
+function getEmployeeFromUrl(): EmployeeIdentity | null {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('employeeId') || params.get('employee_id') || '';
+  const name = params.get('employeeName') || params.get('employee_name') || '';
+  const phone = params.get('employeePhone') || params.get('employee_phone') || '';
+
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    phone: phone || undefined,
+  };
 }
 
 export function getConfiguredEmployeeDefaults(): EmployeeIdentity | null {
@@ -55,11 +69,25 @@ export function getStoredEmployee(): EmployeeIdentity | null {
 }
 
 function getInitialEmployee(): EmployeeIdentity {
-  return getStoredEmployee() || {
-    id: '',
-    name: '',
+  const urlEmployee = getEmployeeFromUrl();
+  if (urlEmployee) {
+    localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(urlEmployee));
+    return urlEmployee;
+  }
+
+  const storedEmployee = getStoredEmployee();
+  if (storedEmployee) return storedEmployee;
+
+  const configuredEmployee = getConfiguredEmployeeDefaults();
+  if (configuredEmployee) return configuredEmployee;
+
+  const anonymousEmployee = {
+    id: generateAnonymousId(),
+    name: `User ${new Date().getTime().toString().slice(-6)}`,
     phone: undefined,
   };
+  localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(anonymousEmployee));
+  return anonymousEmployee;
 }
 
 export const currentEmployee = getInitialEmployee();
