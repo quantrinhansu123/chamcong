@@ -78,16 +78,11 @@ function getInitialEmployee(): EmployeeIdentity {
   const storedEmployee = getStoredEmployee();
   if (storedEmployee) return storedEmployee;
 
-  const configuredEmployee = getConfiguredEmployeeDefaults();
-  if (configuredEmployee) return configuredEmployee;
-
-  const anonymousEmployee = {
-    id: generateAnonymousId(),
-    name: `User ${new Date().getTime().toString().slice(-6)}`,
+  return {
+    id: '',
+    name: '',
     phone: undefined,
   };
-  localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(anonymousEmployee));
-  return anonymousEmployee;
 }
 
 export const currentEmployee = getInitialEmployee();
@@ -153,13 +148,47 @@ export function getTodayKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-export function getBrowserLocation(): Promise<GeoPoint> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Trình duyệt không hỗ trợ GPS.'));
-      return;
-    }
+type BrowserLocationPermission = PermissionState | 'unknown';
 
+async function getBrowserLocationPermission(): Promise<BrowserLocationPermission> {
+  if (!navigator.permissions?.query) {
+    return 'unknown';
+  }
+
+  try {
+    const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    return status.state;
+  } catch {
+    return 'unknown';
+  }
+}
+
+function getPermissionDeniedMessage(permissionState: BrowserLocationPermission) {
+  if (permissionState === 'denied') {
+    return 'Safari đang chặn GPS cho trang này. Hãy vào Safari > Cài đặt cho trang web > Vị trí > Cho phép, rồi tải lại trang.';
+  }
+
+  return 'Safari chưa cấp quyền GPS cho trang này. Nếu đang để "Hỏi", hãy bấm Thử lại và chọn Cho phép khi Safari hỏi quyền vị trí.';
+}
+
+function getGeolocationMessage(error: GeolocationPositionError, permissionState: BrowserLocationPermission = 'unknown') {
+  if (error.code === error.PERMISSION_DENIED) {
+    return getPermissionDeniedMessage(permissionState);
+  }
+
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    return 'Không xác định được GPS hiện tại. Hãy bật Dịch vụ định vị trên iPhone và cho phép Safari dùng vị trí.';
+  }
+
+  if (error.code === error.TIMEOUT) {
+    return 'Lấy vị trí GPS quá lâu. Hãy đứng nơi có tín hiệu tốt hơn rồi thử lại.';
+  }
+
+  return 'Không lấy được vị trí GPS. Hãy kiểm tra quyền vị trí của Safari rồi thử lại.';
+}
+
+function requestBrowserLocation(options: PositionOptions): Promise<GeoPoint> {
+  return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
@@ -171,25 +200,45 @@ export function getBrowserLocation(): Promise<GeoPoint> {
           capturedAt: new Date().toISOString(),
         });
       },
-      (error) => {
-        const message =
-          error.code === error.PERMISSION_DENIED
-            ? 'Trình duyệt đang chặn quyền GPS. Hãy bật Location cho trang này rồi thử lại.'
-            : error.code === error.POSITION_UNAVAILABLE
-              ? 'Không xác định được vị trí GPS hiện tại.'
-              : error.code === error.TIMEOUT
-                ? 'Lấy vị trí GPS quá lâu. Hãy thử lại.'
-                : 'Không lấy được vị trí GPS.';
-
-        reject(new Error(message));
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 30_000,
-        timeout: 15_000,
-      },
+      reject,
+      options,
     );
   });
+}
+
+export async function getBrowserLocation(): Promise<GeoPoint> {
+  if (!navigator.geolocation) {
+    throw new Error('Trình duyệt không hỗ trợ GPS.');
+  }
+
+  if (window.isSecureContext === false) {
+    throw new Error('GPS chỉ hoạt động trên trang HTTPS. Hãy mở link Vercel bằng https rồi thử lại.');
+  }
+
+  const permissionState = await getBrowserLocationPermission();
+
+  try {
+    return await requestBrowserLocation({
+      enableHighAccuracy: true,
+      maximumAge: 30_000,
+      timeout: 15_000,
+    });
+  } catch (firstError) {
+    const error = firstError as GeolocationPositionError;
+    if (error.code === error.PERMISSION_DENIED) {
+      throw new Error(getGeolocationMessage(error, permissionState));
+    }
+
+    try {
+      return await requestBrowserLocation({
+        enableHighAccuracy: false,
+        maximumAge: 120_000,
+        timeout: 20_000,
+      });
+    } catch (secondError) {
+      throw new Error(getGeolocationMessage(secondError as GeolocationPositionError, permissionState));
+    }
+  }
 }
 
 export async function getTodayAttendance() {
@@ -229,7 +278,7 @@ export async function getAttendanceRecordsInRange(startDate: string, endDate: st
   return data as AttendanceDbRecord[];
 }
 
-export async function checkIn(location: GeoPoint) {
+export async function checkIn(location: GeoPoint | null) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
   }
@@ -248,12 +297,12 @@ export async function checkIn(location: GeoPoint) {
         work_date: getTodayKey(),
         ...DEFAULT_SHIFT,
         check_in_at: now,
-        check_in_lat: location.lat,
-        check_in_lng: location.lng,
-        last_lat: location.lat,
-        last_lng: location.lng,
-        location_accuracy_m: location.accuracy,
-        location_captured_at: location.capturedAt,
+        check_in_lat: location?.lat ?? null,
+        check_in_lng: location?.lng ?? null,
+        last_lat: location?.lat ?? null,
+        last_lng: location?.lng ?? null,
+        location_accuracy_m: location?.accuracy ?? null,
+        location_captured_at: location?.capturedAt ?? null,
         status: 'working',
       },
       { onConflict: 'employee_id,work_date' },
@@ -265,7 +314,7 @@ export async function checkIn(location: GeoPoint) {
   return data;
 }
 
-export async function checkOut(record: AttendanceDbRecord, location: GeoPoint) {
+export async function checkOut(record: AttendanceDbRecord, location: GeoPoint | null) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
   }
@@ -274,12 +323,12 @@ export async function checkOut(record: AttendanceDbRecord, location: GeoPoint) {
     .from('attendance_records')
     .update({
       check_out_at: new Date().toISOString(),
-      check_out_lat: location.lat,
-      check_out_lng: location.lng,
-      last_lat: location.lat,
-      last_lng: location.lng,
-      location_accuracy_m: location.accuracy,
-      location_captured_at: location.capturedAt,
+      check_out_lat: location?.lat ?? null,
+      check_out_lng: location?.lng ?? null,
+      last_lat: location?.lat ?? record.last_lat,
+      last_lng: location?.lng ?? record.last_lng,
+      location_accuracy_m: location?.accuracy ?? record.location_accuracy_m,
+      location_captured_at: location?.capturedAt ?? record.location_captured_at,
       status: 'checked_out',
     })
     .eq('id', record.id)

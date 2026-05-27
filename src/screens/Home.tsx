@@ -13,7 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import type { AttendanceDbRecord, Screen } from '../types';
+import type { AttendanceDbRecord, GeoPoint, Screen } from '../types';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
   checkIn,
@@ -63,6 +63,7 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
   const [busyAction, setBusyAction] = useState<'check-in' | 'check-out' | 'location' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -92,26 +93,46 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
     return `${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`;
   }, [record?.last_lat, record?.last_lng]);
 
+  const getLocationForAttendance = async (): Promise<{ location: GeoPoint | null; warning: string | null }> => {
+    try {
+      const location = await getBrowserLocation();
+      setLocationError(null);
+      return { location, warning: null };
+    } catch (err) {
+      const warning = err instanceof Error ? err.message : 'Không lấy được vị trí GPS.';
+      setLocationError(warning);
+      return { location: null, warning };
+    }
+  };
+
   const runAction = async (
     action: 'check-in' | 'check-out' | 'location',
-    callback: () => Promise<AttendanceDbRecord>,
+    callback: () => Promise<{ record: AttendanceDbRecord; message?: string; locationError?: string | null }>,
   ) => {
     setBusyAction(action);
     setError(null);
     setMessage(null);
 
     try {
-      const updatedRecord = await callback();
-      setRecord(updatedRecord);
+      const result = await callback();
+      setRecord(result.record);
+      if ('locationError' in result) {
+        setLocationError(result.locationError ?? null);
+      }
       setMessage(
-        action === 'check-in'
-          ? 'Đã lưu check-in vào Supabase.'
-          : action === 'check-out'
-            ? 'Đã lưu check-out vào Supabase.'
-            : 'Đã lưu GPS vào Supabase.',
+        result.message ??
+          (action === 'check-in'
+            ? 'Đã lưu check-in vào Supabase.'
+            : action === 'check-out'
+              ? 'Đã lưu check-out vào Supabase.'
+              : 'Đã lưu GPS vào Supabase.'),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Có lỗi khi lưu dữ liệu.');
+      const errorMessage = err instanceof Error ? err.message : 'Có lỗi khi lưu dữ liệu.';
+      setError(errorMessage);
+      if (action === 'location') {
+        setLocationError(errorMessage);
+      }
     } finally {
       setBusyAction(null);
     }
@@ -120,23 +141,42 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
   const handleCheckIn = () => {
     if (record?.check_in_at) return;
     runAction('check-in', async () => {
-      const location = await getBrowserLocation();
-      return checkIn(location);
+      const { location, warning } = await getLocationForAttendance();
+      const updatedRecord = await checkIn(location);
+      return {
+        record: updatedRecord,
+        locationError: warning,
+        message: warning
+          ? 'Đã lưu check-in, nhưng chưa lấy được GPS. Bấm Thử lại ở phần Vị trí hiện tại để cập nhật sau.'
+          : 'Đã lưu check-in vào Supabase.',
+      };
     });
   };
 
   const handleCheckOut = () => {
     if (!record?.check_in_at || record.check_out_at) return;
     runAction('check-out', async () => {
-      const location = await getBrowserLocation();
-      return checkOut(record, location);
+      const { location, warning } = await getLocationForAttendance();
+      const updatedRecord = await checkOut(record, location);
+      return {
+        record: updatedRecord,
+        locationError: warning,
+        message: warning
+          ? 'Đã lưu check-out, nhưng chưa lấy được GPS. Bấm Thử lại ở phần Vị trí hiện tại để cập nhật sau.'
+          : 'Đã lưu check-out vào Supabase.',
+      };
     });
   };
 
   const handleSaveLocation = () => {
     runAction('location', async () => {
       const location = await getBrowserLocation();
-      return saveTodayLocation(location);
+      const updatedRecord = await saveTodayLocation(location);
+      return {
+        record: updatedRecord,
+        locationError: null,
+        message: 'Đã lưu GPS vào Supabase.',
+      };
     });
   };
 
@@ -225,20 +265,35 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
         type="button"
         onClick={handleSaveLocation}
         disabled={loading || Boolean(busyAction) || !isSupabaseConfigured}
-        className="glass-card p-5 flex items-start gap-4 text-left disabled:opacity-60 active:scale-[0.99] transition-all"
+        className={`glass-card p-5 flex items-start gap-4 text-left disabled:opacity-60 active:scale-[0.99] transition-all ${
+          locationError ? 'border-red-100 bg-red-50/80' : ''
+        }`}
       >
-        <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 shadow-inner">
-          {busyAction === 'location' ? <Loader2 size={20} className="text-on-surface-variant animate-spin" /> : <MapPin size={20} className="text-on-surface-variant" />}
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-inner ${
+          locationError ? 'bg-red-50 text-red-600' : 'bg-surface-container text-on-surface-variant'
+        }`}>
+          {busyAction === 'location' ? (
+            <Loader2 size={20} className="animate-spin" />
+          ) : locationError ? (
+            <AlertCircle size={20} />
+          ) : (
+            <MapPin size={20} />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start">
             <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">VỊ TRÍ HIỆN TẠI</p>
             <span className="px-2 py-0.5 rounded-full bg-surface-container-low border border-outline-variant/30 text-[10px] font-bold text-outline uppercase tracking-wider">GPS</span>
           </div>
-          <h3 className="font-bold text-on-surface text-lg leading-tight mb-1 truncate">{locationText}</h3>
-          <p className="text-[12px] text-on-surface-variant leading-relaxed">
-            {record?.location_accuracy_m ? `Độ chính xác khoảng ${Math.round(Number(record.location_accuracy_m))}m` : 'Bấm để lấy GPS hiện tại'}
+          <h3 className={`font-bold text-lg leading-tight mb-1 ${locationError ? 'text-red-700' : 'text-on-surface truncate'}`}>
+            {locationError ? 'Chưa lấy được GPS' : locationText}
+          </h3>
+          <p className={`text-[12px] leading-relaxed ${locationError ? 'text-red-700' : 'text-on-surface-variant'}`}>
+            {locationError || (record?.location_accuracy_m ? `Độ chính xác khoảng ${Math.round(Number(record.location_accuracy_m))}m` : 'Bấm để lấy GPS hiện tại')}
           </p>
+          {locationError && (
+            <p className="text-[12px] font-extrabold text-primary-container mt-2">Thử lại</p>
+          )}
         </div>
       </button>
 
