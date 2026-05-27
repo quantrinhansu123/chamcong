@@ -78,11 +78,16 @@ function getInitialEmployee(): EmployeeIdentity {
   const storedEmployee = getStoredEmployee();
   if (storedEmployee) return storedEmployee;
 
-  return {
-    id: '',
-    name: '',
+  const configuredEmployee = getConfiguredEmployeeDefaults();
+  if (configuredEmployee) return configuredEmployee;
+
+  const anonymousEmployee = {
+    id: generateAnonymousId(),
+    name: `User ${new Date().getTime().toString().slice(-6)}`,
     phone: undefined,
   };
+  localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(anonymousEmployee));
+  return anonymousEmployee;
 }
 
 export const currentEmployee = getInitialEmployee();

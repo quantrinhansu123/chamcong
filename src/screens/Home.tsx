@@ -56,6 +56,16 @@ function getStatusLabel(record: AttendanceDbRecord | null) {
   return 'Đã check-in';
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (!(err instanceof Error)) return fallback;
+
+  if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+    return 'Không kết nối được Supabase. Hãy kiểm tra mạng hoặc cấu hình Supabase rồi thử lại.';
+  }
+
+  return err.message || fallback;
+}
+
 export default function Home({ setScreen }: { setScreen?: (screen: Screen) => void }) {
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [now, setNow] = useState(new Date());
@@ -79,7 +89,7 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
 
     getTodayAttendance()
       .then(setRecord)
-      .catch((err) => setError(err.message || 'Không tải được dữ liệu chấm công.'))
+      .catch((err) => setError(getErrorMessage(err, 'Không tải được dữ liệu chấm công.')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -99,7 +109,7 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
       setLocationError(null);
       return { location, warning: null };
     } catch (err) {
-      const warning = err instanceof Error ? err.message : 'Không lấy được vị trí GPS.';
+      const warning = getErrorMessage(err, 'Không lấy được vị trí GPS.');
       setLocationError(warning);
       return { location: null, warning };
     }
@@ -128,7 +138,7 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
               : 'Đã lưu GPS vào Supabase.'),
       );
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Có lỗi khi lưu dữ liệu.';
+      const errorMessage = getErrorMessage(err, 'Có lỗi khi lưu dữ liệu.');
       setError(errorMessage);
       if (action === 'location') {
         setLocationError(errorMessage);
