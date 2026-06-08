@@ -114,6 +114,96 @@ export function setCurrentEmployee(employee: EmployeeIdentity) {
   return nextEmployee;
 }
 
+export interface EmployeeRecord {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  avatar_url: string | null;
+  department_id: number | null;
+  position: string | null;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateEmployeeInput {
+  fullName: string;
+  email: string;
+  phone?: string;
+  position?: string;
+}
+
+function getSupabaseErrorMessage(error: { code?: string; message?: string }, fallback: string) {
+  if (error.code === '23505') {
+    return 'Email hoặc số điện thoại đã tồn tại.';
+  }
+
+  if (error.code === '23502') {
+    return 'Vui lòng điền đầy đủ thông tin bắt buộc.';
+  }
+
+  return error.message || fallback;
+}
+
+export async function getAllEmployees() {
+  if (!supabase) {
+    throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .order('full_name', { ascending: true });
+
+  if (error) throw error;
+  return data as EmployeeRecord[];
+}
+
+export async function createEmployee(input: CreateEmployeeInput) {
+  if (!supabase) {
+    throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  const payload = {
+    full_name: input.fullName.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone?.trim() || null,
+    position: input.position?.trim() || null,
+    status: 'active',
+  };
+
+  if (!payload.full_name || !payload.email) {
+    throw new Error('Vui lòng nhập họ tên và email.');
+  }
+
+  const { data, error } = await supabase
+    .from('employees')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) {
+    throw new Error(getSupabaseErrorMessage(error, 'Không thêm được nhân sự.'));
+  }
+
+  return data as EmployeeRecord;
+}
+
+export async function getTodayAttendanceForAll() {
+  if (!supabase) {
+    throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('*')
+    .eq('work_date', getTodayKey());
+
+  if (error) throw error;
+  return data as AttendanceDbRecord[];
+}
+
 export async function saveEmployeeToSupabase() {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
@@ -123,12 +213,18 @@ export async function saveEmployeeToSupabase() {
     return null;
   }
 
+  const numericId = Number(currentEmployee.id);
+  if (!Number.isFinite(numericId)) {
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('employees')
     .upsert(
       {
-        id: currentEmployee.id,
-        name: currentEmployee.name,
+        id: numericId,
+        full_name: currentEmployee.name,
+        email: `${currentEmployee.id}@jarviz.local`,
       },
       { onConflict: 'id' },
     )
@@ -278,6 +374,27 @@ export async function getAttendanceRecordsInRange(startDate: string, endDate: st
     .lte('work_date', endDate)
     .order('work_date', { ascending: true })
     .order('employee_name', { ascending: true });
+
+  if (error) throw error;
+  return data as AttendanceDbRecord[];
+}
+
+export async function getEmployeeAttendanceRecords(
+  employeeId: string,
+  startDate: string,
+  endDate: string,
+) {
+  if (!supabase) {
+    throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .gte('work_date', startDate)
+    .lte('work_date', endDate)
+    .order('work_date', { ascending: false });
 
   if (error) throw error;
   return data as AttendanceDbRecord[];

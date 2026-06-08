@@ -23,6 +23,7 @@ import {
   getTodayAttendance,
   saveTodayLocation,
 } from '../lib/attendanceService';
+import { formatDurationShort, getOvertimeMinutes } from '../lib/attendanceUtils';
 
 const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
@@ -97,6 +98,11 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
     () => formatDuration(record?.check_in_at, record?.check_out_at, now),
     [record?.check_in_at, record?.check_out_at, now],
   );
+
+  const overtimeMinutes = useMemo(() => {
+    if (!record) return 0;
+    return getOvertimeMinutes(record, now);
+  }, [record, now]);
 
   const locationText = useMemo(() => {
     if (!record?.last_lat || !record?.last_lng) return 'Chưa ghi nhận GPS';
@@ -337,6 +343,11 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
           <div className="flex flex-col items-center justify-center py-2">
             <div className="text-[32px] font-bold text-on-surface leading-tight">{duration}</div>
             <p className="text-[12px] font-semibold text-outline">Hôm nay</p>
+            {overtimeMinutes > 0 && (
+              <p className="text-[11px] font-bold text-violet-600 mt-1">
+                OT +{formatDurationShort(overtimeMinutes)}
+              </p>
+            )}
           </div>
         </div>
       </div>
