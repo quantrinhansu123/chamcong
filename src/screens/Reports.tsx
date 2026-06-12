@@ -7,15 +7,20 @@ import {
   Clock,
   Timer,
   UserMinus,
-  ChevronRight,
   Download,
   AlertCircle,
   Loader2,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { AttendanceDbRecord } from '../types';
-import { currentEmployee, getAttendanceRecordsInRange } from '../lib/attendanceService';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { currentEmployee, getAllEmployees, getAttendanceRecordsInRange, type EmployeeRecord } from '../lib/attendanceService';
+import { getSupabaseConfigError, getSupabaseRequestErrorMessage } from '../lib/supabase';
+import { isLate } from '../lib/attendanceUtils';
+import AttendanceStatusGrid from '../components/AttendanceStatusGrid';
+import UserAvatar from '../components/UserAvatar';
 
 type PeriodKey = 'current' | 'previous';
 
@@ -63,10 +68,6 @@ function getWeekdayCount(startDate: Date, endDate: Date) {
   return count;
 }
 
-function getScheduledDateTime(record: AttendanceDbRecord) {
-  return new Date(`${record.work_date}T${record.scheduled_start}`);
-}
-
 function getWorkedMinutes(record: AttendanceDbRecord, now: Date) {
   if (!record.check_in_at) return 0;
 
@@ -80,10 +81,6 @@ function getWorkedMinutes(record: AttendanceDbRecord, now: Date) {
   return Math.max(0, Math.floor((endTime - startTime) / 60_000));
 }
 
-function isLate(record: AttendanceDbRecord) {
-  if (!record.check_in_at) return false;
-  return new Date(record.check_in_at).getTime() > getScheduledDateTime(record).getTime();
-}
 
 function formatHours(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
@@ -108,11 +105,13 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reportState, setReportState] = useState<ReportState | null>(null);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    const configError = getSupabaseConfigError();
+    if (configError) {
       setLoading(false);
-      setError('Chưa cấu hình VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.');
+      setError(configError);
       return;
     }
 
@@ -121,15 +120,15 @@ export default function Reports() {
     setLoading(true);
     setError(null);
 
-    getAttendanceRecordsInRange(toDateKey(startDate), toDateKey(endDate))
-      .then((records) => {
-        setReportState({
-          records,
-          startDate,
-          endDate,
-        });
+    Promise.all([
+      getAllEmployees(),
+      getAttendanceRecordsInRange(toDateKey(startDate), toDateKey(endDate)),
+    ])
+      .then(([employeeRows, records]) => {
+        setEmployees(employeeRows);
+        setReportState({ records, startDate, endDate });
       })
-      .catch((err) => setError(err.message || 'Không tải được dữ liệu báo cáo.'))
+      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Không tải được dữ liệu báo cáo.')))
       .finally(() => setLoading(false));
   }, [period]);
 
@@ -153,7 +152,7 @@ export default function Reports() {
   const maxWeeklyMinutes = Math.max(...weeklyMinutes, 1);
   const statusTotal = Math.max(onTimeRecords + lateRecords.length + absentRecords.length, 1);
 
-  const employees = Array.from(
+  const topEmployees = Array.from(
     records.reduce((map, record) => {
       const existing = map.get(record.employee_id) || {
         id: record.employee_id,
@@ -161,6 +160,7 @@ export default function Reports() {
         days: 0,
         late: 0,
         minutes: 0,
+        projects: new Set<string>(),
         lastStatus: record.status,
       };
 
@@ -172,64 +172,50 @@ export default function Reports() {
         }
       }
 
+      if (record.product_name) {
+        existing.projects.add(record.product_name);
+      }
+
       existing.lastStatus = record.status;
       map.set(record.employee_id, existing);
       return map;
-    }, new Map<string, { id: string; name: string; days: number; late: number; minutes: number; lastStatus: AttendanceDbRecord['status'] }>()),
+    }, new Map<string, { id: string; name: string; days: number; late: number; minutes: number; projects: Set<string>; lastStatus: AttendanceDbRecord['status'] }>()),
   )
-    .map(([, value]) => value)
+    .map(([, value]) => ({
+      ...value,
+      projectLabels: Array.from(value.projects),
+    }))
     .sort((left, right) => right.minutes - left.minutes || right.days - left.days)
     .slice(0, 5);
 
+  const statusItems = [
+    { icon: CheckCircle2, label: 'Đúng giờ', value: onTimeRecords, tone: 'emerald' as const },
+    { icon: AlertTriangle, label: 'Đi muộn', value: lateRecords.length, tone: 'amber' as const },
+    { icon: XCircle, label: 'Nghỉ', value: absentRecords.length, tone: 'red' as const },
+  ];
+
+  const toneStyles = {
+    emerald: { card: 'bg-emerald-50 border-emerald-100', icon: 'text-emerald-600', value: 'text-emerald-800', label: 'text-emerald-700' },
+    amber: { card: 'bg-amber-50 border-amber-100', icon: 'text-amber-500', value: 'text-amber-800', label: 'text-amber-700' },
+    red: { card: 'bg-red-50 border-red-100', icon: 'text-red-500', value: 'text-red-800', label: 'text-red-700' },
+  };
+
   const stats = [
-    {
-      icon: Briefcase,
-      label: 'Ngày công',
-      value: `${checkedInRecords.length}`,
-      sub: `${uniqueEmployeeIds.length} nhân sự`,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-    },
-    {
-      icon: Clock,
-      label: 'Giờ làm',
-      value: formatHours(totalMinutes),
-      unit: 'h',
-      sub: `${formatHoursLabel(totalMinutes)} thực tế`,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-    },
-    {
-      icon: Timer,
-      label: 'Đi muộn',
-      value: `${lateRecords.length}`,
-      sub: `${checkedInRecords.length ? Math.round((lateRecords.length / checkedInRecords.length) * 100) : 0}% ca làm`,
-      color: 'text-on-tertiary-container',
-      bg: 'bg-surface-container-high',
-    },
-    {
-      icon: UserMinus,
-      label: 'Chưa check-in',
-      value: `${absentRecords.length}`,
-      sub: `${businessDays} ngày làm việc`,
-      color: 'text-red-500',
-      bg: 'bg-red-50',
-    },
+    { icon: Briefcase, label: 'Ngày công', value: `${checkedInRecords.length}`, sub: `${uniqueEmployeeIds.length} nhân sự`, color: 'text-emerald-600' },
+    { icon: Clock, label: 'Giờ làm', value: formatHours(totalMinutes), unit: 'h', sub: formatHoursLabel(totalMinutes), color: 'text-amber-600' },
+    { icon: Timer, label: 'Đi muộn', value: `${lateRecords.length}`, sub: checkedInRecords.length ? `${Math.round((lateRecords.length / checkedInRecords.length) * 100)}% ca` : '0% ca', color: 'text-on-surface-variant' },
+    { icon: UserMinus, label: 'Chưa check-in', value: `${absentRecords.length}`, sub: `${businessDays} ngày làm việc`, color: 'text-red-500' },
   ];
 
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex flex-col gap-6"
+      className="flex flex-col gap-4"
     >
-      <div className="flex justify-between items-center py-4 bg-surface sticky top-0 z-40">
+      <div className="flex justify-between items-center py-3 bg-surface sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <img
-            alt="User"
-            className="w-10 h-10 rounded-full object-cover border border-outline-variant/30 active:scale-95 transition-all"
-            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=100&h=100"
-          />
+          <UserAvatar name={currentEmployee.name || 'Jarviz'} size="sm" className="border border-outline-variant/30" />
           <div>
             <p className="text-[10px] font-bold text-on-surface-variant leading-none">Xin chào,</p>
             <h1 className="text-xl font-bold text-primary tracking-tight">{currentEmployee.name || 'Jarviz'}</h1>
@@ -240,9 +226,9 @@ export default function Reports() {
         </button>
       </div>
 
-      <section className="flex flex-col gap-4">
-        <h2 className="text-2xl font-bold text-primary tracking-tight">Báo cáo</h2>
-        <div className="flex items-center gap-2 bg-surface-container-low p-1.5 rounded-2xl border border-outline-variant/20 shadow-sm">
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xl font-bold text-primary tracking-tight">Báo cáo</h2>
+        <div className="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl border border-outline-variant/20">
           <button
             onClick={() => setPeriod('current')}
             className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
@@ -266,41 +252,85 @@ export default function Reports() {
       </section>
 
       {error && (
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 flex items-center gap-2">
+        <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-sm font-bold text-red-700 flex items-center gap-2">
           <AlertCircle size={16} className="shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-2xl p-4 ambient-shadow flex flex-col gap-4 relative overflow-hidden group border border-outline-variant/10">
-            <div className="flex items-center justify-between">
-              <stat.icon size={20} className={stat.color} />
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${stat.color} ${stat.bg}`}>
-                {loading ? '...' : stat.sub}
-              </span>
-            </div>
-            <div>
-              <p className="text-[12px] font-bold text-on-surface-variant/80 mb-0.5">{stat.label}</p>
-              <p className="text-3xl font-extrabold text-primary">
-                {loading ? '--' : stat.value}
-                {stat.unit && <span className="text-sm font-bold text-on-surface-variant ml-1">{stat.unit}</span>}
+      <section className="bg-white rounded-xl p-3.5 border border-outline-variant/10 space-y-3">
+        <h3 className="text-sm font-bold text-primary">Tổng hợp</h3>
+
+        <div className="grid grid-cols-3 gap-2">
+          {statusItems.map((item) => {
+            const tone = toneStyles[item.tone];
+            return (
+              <div key={item.label} className={`rounded-lg border px-2 py-2.5 text-center ${tone.card}`}>
+                <item.icon size={16} className={`mx-auto mb-1 ${tone.icon}`} />
+                <p className={`text-[9px] font-bold uppercase tracking-wide ${tone.label}`}>{item.label}</p>
+                <p className={`text-lg font-extrabold leading-tight ${tone.value}`}>
+                  {loading ? '—' : item.value}
+                  {!loading && statusTotal > 0 && (
+                    <span className="block text-[9px] font-semibold opacity-70">
+                      {Math.round((item.value / statusTotal) * 100)}%
+                    </span>
+                  )}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {stats.map((stat) => (
+            <div key={stat.label} className="rounded-lg border border-outline-variant/10 bg-surface-container-low/40 px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <stat.icon size={14} className={stat.color} />
+                <span className="text-[11px] font-semibold text-on-surface-variant">{stat.label}</span>
+              </div>
+              <p className="text-xl font-extrabold text-primary leading-none">
+                {loading ? '—' : stat.value}
+                {stat.unit && <span className="text-xs font-bold text-on-surface-variant ml-0.5">{stat.unit}</span>}
               </p>
+              {!loading && <p className="text-[10px] text-on-surface-variant/70 mt-0.5">{stat.sub}</p>}
             </div>
-            <div className={`absolute -bottom-6 -right-6 w-20 h-20 ${stat.bg} opacity-20 rounded-full blur-2xl group-hover:scale-125 transition-transform`} />
-          </div>
-        ))}
+          ))}
+        </div>
       </section>
 
-      <section className="bg-white rounded-2xl p-6 ambient-shadow border border-outline-variant/10 space-y-6">
+      <section className="bg-white rounded-xl p-3.5 border border-outline-variant/10 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-primary">Biểu đồ giờ làm theo tuần</h3>
+          <h3 className="text-sm font-bold text-primary">Bảng công</h3>
+          <div className="flex gap-2.5 text-[9px] font-semibold text-on-surface-variant">
+            <span className="flex items-center gap-0.5"><span className="text-emerald-600">✓</span> Đúng giờ</span>
+            <span className="flex items-center gap-0.5"><span className="text-amber-500">!</span> Muộn</span>
+            <span className="flex items-center gap-0.5"><span className="text-red-500">✕</span> Nghỉ</span>
+          </div>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-6 text-on-surface-variant gap-2">
+            <Loader2 size={16} className="animate-spin" />
+            <span className="text-xs font-medium">Đang tải...</span>
+          </div>
+        ) : reportState ? (
+          <AttendanceStatusGrid
+            employees={employees}
+            records={records}
+            year={reportState.startDate.getFullYear()}
+            monthIndex={reportState.startDate.getMonth()}
+            daysInMonth={reportState.endDate.getDate()}
+          />
+        ) : null}
+      </section>
+
+      <section className="bg-white rounded-xl p-4 border border-outline-variant/10 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-primary">Giờ làm theo tuần</h3>
           <button className="text-on-surface-variant hover:text-primary transition-all p-1">
             <MoreHorizontal size={20} />
           </button>
         </div>
-        <div className="h-40 flex items-end justify-between gap-4 px-2 relative pt-2">
+        <div className="h-32 flex items-end justify-between gap-3 px-1 relative pt-2">
           <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 opacity-40">
             {[1, 2, 3, 4].map((line) => <div key={line} className="border-b border-outline-variant/30 w-full" />)}
           </div>
@@ -331,51 +361,14 @@ export default function Reports() {
         </div>
       </section>
 
-      <section className="bg-white rounded-2xl p-6 ambient-shadow border border-outline-variant/10 space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-primary">Phân bổ trạng thái</h3>
-          <button className="text-on-surface-variant hover:text-primary transition-all">
-            <MoreHorizontal size={20} />
-          </button>
-        </div>
-        <div className="flex items-center justify-center py-4">
-          <div
-            className="w-40 h-40 rounded-full relative flex items-center justify-center shadow-lg"
-            style={{
-              background: `conic-gradient(from 0deg, var(--color-primary-fixed) 0% ${(onTimeRecords / statusTotal) * 100}%, var(--color-secondary-container) ${(onTimeRecords / statusTotal) * 100}% ${((onTimeRecords + lateRecords.length) / statusTotal) * 100}%, #ffdad6 ${((onTimeRecords + lateRecords.length) / statusTotal) * 100}% 100%)`,
-            }}
-          >
-            <div className="w-24 h-24 bg-white rounded-full absolute shadow-inner border border-outline-variant/5" />
-            <div className="z-10 text-center flex flex-col items-center">
-              <span className="text-[28px] font-extrabold text-primary leading-tight">{checkedInRecords.length}</span>
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Ca đã chấm công</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-center gap-4 flex-wrap pb-2">
-          {[
-            { color: 'bg-primary-fixed', label: 'Đúng giờ', count: onTimeRecords },
-            { color: 'bg-secondary-container', label: 'Đi muộn', count: lateRecords.length },
-            { color: 'bg-red-100', label: 'Chưa check-in', count: absentRecords.length },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center gap-2 bg-surface-container-low/50 px-3 py-1.5 rounded-full border border-outline-variant/10">
-              <div className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-              <span className="text-[11px] font-bold text-on-surface-variant">
-                {item.label} <span className="opacity-50">({item.count})</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="bg-white rounded-2xl p-6 ambient-shadow border border-outline-variant/10">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-primary">Nhân sự hoạt động</h3>
-          <button className="text-[12px] font-bold text-secondary hover:underline transition-all">
+      <section className="bg-white rounded-xl p-4 border border-outline-variant/10">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-primary">Nhân sự hoạt động</h3>
+          <span className="text-[11px] font-bold text-on-surface-variant">
             {uniqueEmployeeIds.length} người
-          </button>
+          </span>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-2">
           {loading && (
             <div className="flex items-center justify-center py-6 text-on-surface-variant gap-2">
               <Loader2 size={18} className="animate-spin" />
@@ -383,40 +376,39 @@ export default function Reports() {
             </div>
           )}
 
-          {!loading && employees.length === 0 && (
+          {!loading && topEmployees.length === 0 && (
             <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-5 text-sm font-medium text-on-surface-variant">
               Chưa có dữ liệu chấm công trong kỳ đã chọn.
             </div>
           )}
 
-          {!loading && employees.map((employee) => (
-            <div key={employee.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container-low transition-all group border border-transparent hover:border-outline-variant/20">
-              <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-full bg-primary-fixed/20 flex items-center justify-center text-primary shadow-sm font-bold">
+          {!loading && topEmployees.map((employee) => (
+            <div key={employee.id} className="flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-surface-container-low transition-all">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-primary-fixed/20 flex items-center justify-center text-primary text-sm font-bold shrink-0">
                   {employee.name.slice(0, 1).toUpperCase()}
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-primary">{employee.name}</p>
-                  <p className="text-[12px] font-medium text-on-surface-variant/80">
-                    {employee.days} ngày công, {formatHoursLabel(employee.minutes)}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-primary truncate">{employee.name}</p>
+                  <p className="text-[11px] text-on-surface-variant">
+                    {employee.days} ngày · {formatHoursLabel(employee.minutes)}
+                    {employee.projectLabels.length > 0 && (
+                      <> · {employee.projectLabels.join(', ')}</>
+                    )}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[12px] font-bold text-on-surface-variant">
-                  {employee.late ? `${employee.late} muộn` : 'Đúng giờ'}
-                </span>
-                <ChevronRight size={18} className="text-on-surface-variant group-hover:text-primary group-hover:translate-x-1 transition-all" />
-              </div>
+              <span className="text-[11px] font-bold text-on-surface-variant shrink-0 ml-2">
+                {employee.late ? `${employee.late} muộn` : 'Đúng giờ'}
+              </span>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="pt-4 pb-12 flex flex-col gap-4">
-        <button className="bg-emerald-600 text-white w-full px-6 py-4 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 hover:shadow-emerald-600/30 active:scale-95 transition-all overflow-hidden relative group">
-          <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-          <Download size={20} />
+      <section className="pt-2 pb-10">
+        <button className="bg-emerald-600 text-white w-full px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+          <Download size={18} />
           Xuất báo cáo
         </button>
       </section>

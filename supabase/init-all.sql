@@ -1,5 +1,7 @@
--- Jarviz Attendance — schema khớp với app (employees + attendance_records + products)
--- Chạy file này trong Supabase SQL Editor hoặc: npm run db:seed
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Jarviz Attendance — CHẠY TOÀN BỘ FILE NÀY trong Supabase SQL Editor
+-- Project: https://pmpkffexnqrcfauyjemk.supabase.co
+-- ═══════════════════════════════════════════════════════════════════════════
 
 create extension if not exists "pgcrypto";
 
@@ -50,12 +52,10 @@ create table if not exists public.attendance_records (
   constraint attendance_records_employee_day_key unique (employee_id, work_date)
 );
 
-create index if not exists attendance_records_work_date_idx
-  on public.attendance_records (work_date desc);
+create index if not exists attendance_records_work_date_idx on public.attendance_records (work_date desc);
+create index if not exists attendance_records_employee_date_idx on public.attendance_records (employee_id, work_date desc);
 
-create index if not exists attendance_records_employee_date_idx
-  on public.attendance_records (employee_id, work_date desc);
-
+-- ─── Products & locations ────────────────────────────────────────────────────
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -92,33 +92,24 @@ alter table public.attendance_records
 create index if not exists attendance_records_product_idx on public.attendance_records (product_id, work_date desc);
 
 create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
+returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end;
 $$;
 
 drop trigger if exists set_employees_updated_at on public.employees;
-create trigger set_employees_updated_at
-before update on public.employees
+create trigger set_employees_updated_at before update on public.employees
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_attendance_records_updated_at on public.attendance_records;
-create trigger set_attendance_records_updated_at
-before update on public.attendance_records
+create trigger set_attendance_records_updated_at before update on public.attendance_records
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_products_updated_at on public.products;
-create trigger set_products_updated_at
-before update on public.products
+create trigger set_products_updated_at before update on public.products
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_product_locations_updated_at on public.product_locations;
-create trigger set_product_locations_updated_at
-before update on public.product_locations
+create trigger set_product_locations_updated_at before update on public.product_locations
 for each row execute function public.set_updated_at();
 
 alter table public.departments enable row level security;
@@ -132,36 +123,28 @@ create policy "demo departments read" on public.departments for select to anon, 
 
 drop policy if exists "demo employees read" on public.employees;
 create policy "demo employees read" on public.employees for select to anon, authenticated using (true);
-
 drop policy if exists "demo employees insert" on public.employees;
 create policy "demo employees insert" on public.employees for insert to anon, authenticated with check (true);
-
 drop policy if exists "demo employees update" on public.employees;
 create policy "demo employees update" on public.employees for update to anon, authenticated using (true) with check (true);
 
 drop policy if exists "demo attendance read" on public.attendance_records;
 create policy "demo attendance read" on public.attendance_records for select to anon, authenticated using (true);
-
 drop policy if exists "demo attendance insert" on public.attendance_records;
 create policy "demo attendance insert" on public.attendance_records for insert to anon, authenticated with check (true);
-
 drop policy if exists "demo attendance update" on public.attendance_records;
 create policy "demo attendance update" on public.attendance_records for update to anon, authenticated using (true) with check (true);
 
 drop policy if exists "demo products read" on public.products;
 create policy "demo products read" on public.products for select to anon, authenticated using (true);
-
 drop policy if exists "demo products insert" on public.products;
 create policy "demo products insert" on public.products for insert to anon, authenticated with check (true);
-
 drop policy if exists "demo products update" on public.products;
 create policy "demo products update" on public.products for update to anon, authenticated using (true) with check (true);
 
 drop policy if exists "demo product_locations read" on public.product_locations;
 create policy "demo product_locations read" on public.product_locations for select to anon, authenticated using (true);
-
 drop policy if exists "demo product_locations insert" on public.product_locations;
 create policy "demo product_locations insert" on public.product_locations for insert to anon, authenticated with check (true);
-
 drop policy if exists "demo product_locations update" on public.product_locations;
 create policy "demo product_locations update" on public.product_locations for update to anon, authenticated using (true) with check (true);

@@ -1,11 +1,6 @@
 import { supabase } from './supabase';
-import type { AttendanceDbRecord, GeoPoint } from '../types';
-
-const DEFAULT_SHIFT = {
-  shift_name: 'Ca hành chính',
-  scheduled_start: '08:00',
-  scheduled_end: '17:30',
-};
+import type { AttendanceDbRecord, CheckInProductSelection, GeoPoint } from '../types';
+import { getShiftConfig } from './settingsService';
 
 const EMPLOYEE_ID = (import.meta.env.VITE_EMPLOYEE_ID as string | undefined) || '';
 const EMPLOYEE_NAME = (import.meta.env.VITE_EMPLOYEE_NAME as string | undefined) || '';
@@ -400,13 +395,20 @@ export async function getEmployeeAttendanceRecords(
   return data as AttendanceDbRecord[];
 }
 
-export async function checkIn(location: GeoPoint | null) {
+export async function checkIn(
+  location: GeoPoint | null,
+  product: CheckInProductSelection,
+) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
   }
 
   if (!hasCurrentEmployee()) {
     throw new Error('Vui lòng nhập mã nhân viên trước khi chấm công.');
+  }
+
+  if (!product.productId || !product.productLocationId) {
+    throw new Error('Vui lòng chọn sản phẩm và vị trí trước khi check-in.');
   }
 
   const now = new Date().toISOString();
@@ -417,7 +419,11 @@ export async function checkIn(location: GeoPoint | null) {
         employee_id: currentEmployee.id,
         employee_name: currentEmployee.name,
         work_date: getTodayKey(),
-        ...DEFAULT_SHIFT,
+        ...getShiftConfig(),
+        product_id: product.productId,
+        product_location_id: product.productLocationId,
+        product_name: product.productName,
+        location_name: product.locationName,
         check_in_at: now,
         check_in_lat: location?.lat ?? null,
         check_in_lng: location?.lng ?? null,
@@ -433,7 +439,7 @@ export async function checkIn(location: GeoPoint | null) {
     .single();
 
   if (error) throw error;
-  return data;
+  return data as AttendanceDbRecord;
 }
 
 export async function checkOut(record: AttendanceDbRecord, location: GeoPoint | null) {
@@ -502,7 +508,7 @@ export async function saveTodayLocation(location: GeoPoint) {
       employee_id: currentEmployee.id,
       employee_name: currentEmployee.name,
       work_date: getTodayKey(),
-      ...DEFAULT_SHIFT,
+      ...getShiftConfig(),
       last_lat: location.lat,
       last_lng: location.lng,
       location_accuracy_m: location.accuracy,

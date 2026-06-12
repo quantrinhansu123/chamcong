@@ -1,4 +1,5 @@
 import type { AttendanceDbRecord } from '../types';
+import { getAppSettings } from './settingsService';
 
 export function toDateKey(value = new Date()) {
   const year = value.getFullYear();
@@ -64,7 +65,8 @@ export function hasOvertime(record: AttendanceDbRecord, now = new Date()) {
 
 export function isLate(record: AttendanceDbRecord) {
   if (!record.check_in_at) return false;
-  return new Date(record.check_in_at).getTime() > getScheduledStartDateTime(record).getTime();
+  const graceMs = getAppSettings().lateGraceMinutes * 60_000;
+  return new Date(record.check_in_at).getTime() > getScheduledStartDateTime(record).getTime() + graceMs;
 }
 
 export function formatDurationShort(minutes: number) {

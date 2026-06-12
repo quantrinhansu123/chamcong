@@ -1,0 +1,1 @@
+-- Không có dữ liệu mẫu. Thêm nhân sự và chấm công qua ứng dụng hoặc Supabase Dashboard.

@@ -1,4 +1,12 @@
-export type Screen = 'home' | 'history' | 'employees' | 'reports' | 'settings';
+export type Screen = 'home' | 'history' | 'reports' | 'settings';
+
+export const ROUTES = {
+  home: '/',
+  reports: '/bao-cao',
+  settings: '/cai-dat',
+  history: '/lich-su',
+  desktopChamCong: '/desktop/cham-cong',
+} as const;
 
 export interface Employee {
   id: string;
@@ -23,6 +31,31 @@ export interface AttendanceRecord {
 
 export type AttendanceStatus = 'not_checked_in' | 'working' | 'checked_out';
 
+export interface Product {
+  id: string;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductLocation {
+  id: string;
+  product_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radius_m: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductWithLocations extends Product {
+  locations: ProductLocation[];
+}
+
 export interface AttendanceDbRecord {
   id: string;
   employee_id: string;
@@ -41,9 +74,20 @@ export interface AttendanceDbRecord {
   last_lng: number | null;
   location_accuracy_m: number | null;
   location_captured_at: string | null;
+  product_id: string | null;
+  product_location_id: string | null;
+  product_name: string | null;
+  location_name: string | null;
   status: AttendanceStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface CheckInProductSelection {
+  productId: string;
+  productLocationId: string;
+  productName: string;
+  locationName: string;
 }
 
 export interface GeoPoint {

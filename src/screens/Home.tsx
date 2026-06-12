@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  BarChart2,
   Calendar,
   CheckCircle2,
   ChevronRight,
@@ -11,16 +11,22 @@ import {
   MapPin,
   MoreHorizontal,
   AlertCircle,
+  Package,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import type { AttendanceDbRecord, GeoPoint, Screen } from '../types';
-import { isSupabaseConfigured } from '../lib/supabase';
+import type { AttendanceDbRecord, GeoPoint } from '../types';
+import ProductCheckInPicker from '../components/ProductCheckInPicker';
+import { useProductCheckIn } from '../hooks/useProductCheckIn';
+import UserAvatar from '../components/UserAvatar';
+import { getSupabaseConfigError, getSupabaseRequestErrorMessage, isSupabaseConfigured } from '../lib/supabase';
 import {
   checkIn,
   checkOut,
   currentEmployee,
+  getAllEmployees,
   getBrowserLocation,
   getTodayAttendance,
+  getTodayAttendanceForAll,
   saveTodayLocation,
 } from '../lib/attendanceService';
 import { formatDurationShort, getOvertimeMinutes } from '../lib/attendanceUtils';
@@ -67,7 +73,7 @@ function getErrorMessage(err: unknown, fallback: string) {
   return err.message || fallback;
 }
 
-export default function Home({ setScreen }: { setScreen?: (screen: Screen) => void }) {
+export default function Home() {
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -75,6 +81,23 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [overview, setOverview] = useState({
+    total: 0,
+    checkedIn: 0,
+    notCheckedIn: 0,
+    absent: 0,
+    loading: true,
+  });
+  const {
+    products,
+    loading: productsLoading,
+    selectedProductId,
+    selectedLocationId,
+    handleProductChange,
+    setSelectedLocationId,
+    selection: productSelection,
+    canCheckIn,
+  } = useProductCheckIn();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -82,16 +105,42 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    const configError = getSupabaseConfigError();
+    if (configError) {
       setLoading(false);
-      setError('Chưa cấu hình VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.');
+      setError(configError);
       return;
     }
 
     getTodayAttendance()
       .then(setRecord)
-      .catch((err) => setError(getErrorMessage(err, 'Không tải được dữ liệu chấm công.')))
+      .catch((err) => setError(getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'Không tải được dữ liệu chấm công.'))))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (getSupabaseConfigError()) {
+      setOverview((prev) => ({ ...prev, loading: false }));
+      return;
+    }
+
+    Promise.all([getAllEmployees(), getTodayAttendanceForAll()])
+      .then(([employees, todayRecords]) => {
+        const activeEmployees = employees.filter((emp) => emp.status === 'active');
+        const checkedInIds = new Set(
+          todayRecords.filter((row) => row.check_in_at).map((row) => row.employee_id),
+        );
+        const absent = todayRecords.filter((row) => !row.check_in_at).length;
+
+        setOverview({
+          total: activeEmployees.length,
+          checkedIn: checkedInIds.size,
+          notCheckedIn: Math.max(0, activeEmployees.length - checkedInIds.size),
+          absent,
+          loading: false,
+        });
+      })
+      .catch(() => setOverview((prev) => ({ ...prev, loading: false })));
   }, []);
 
   const duration = useMemo(
@@ -156,9 +205,13 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
 
   const handleCheckIn = () => {
     if (record?.check_in_at) return;
+    if (!productSelection) {
+      setError('Vui lòng chọn sản phẩm và vị trí trước khi check-in.');
+      return;
+    }
     runAction('check-in', async () => {
       const { location, warning } = await getLocationForAttendance();
-      const updatedRecord = await checkIn(location);
+      const updatedRecord = await checkIn(location, productSelection);
       return {
         record: updatedRecord,
         locationError: warning,
@@ -196,7 +249,13 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
     });
   };
 
-  const checkInDisabled = loading || Boolean(busyAction) || Boolean(record?.check_in_at) || !isSupabaseConfigured;
+  const checkInDisabled =
+    loading
+    || productsLoading
+    || Boolean(busyAction)
+    || Boolean(record?.check_in_at)
+    || !isSupabaseConfigured
+    || !canCheckIn;
   const checkOutDisabled = loading || Boolean(busyAction) || !record?.check_in_at || Boolean(record?.check_out_at) || !isSupabaseConfigured;
   const currentDay = now.getDate();
 
@@ -209,21 +268,12 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
       <div className="header-bg -mx-5 px-5 pt-12 pb-20 mb-[-80px]">
         <div className="flex justify-between items-center mb-10">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full overflow-hidden border border-primary-fixed/20 shadow-lg">
-              <img
-                src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=100&h=100"
-                alt="Avatar"
-                className="w-full h-full object-cover"
-              />
-            </div>
+            <UserAvatar name={currentEmployee.name} size="md" className="border border-primary-fixed/20 shadow-lg" />
             <div>
               <p className="text-[12px] text-white/70 font-medium">Xin chào,</p>
               <h1 className="text-xl font-bold text-white tracking-tight">{currentEmployee.name}</h1>
             </div>
           </div>
-          <button className="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 text-white hover:bg-white/20 transition-all border border-white/5">
-            <BarChart2 size={20} />
-          </button>
         </div>
       </div>
 
@@ -244,7 +294,28 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
             {formatTime(record?.check_in_at)}
           </div>
           <div className="text-sm font-medium text-outline">{formatDate(now)}</div>
+          {(record?.product_name || record?.location_name) && (
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-on-surface-variant mt-1">
+              <Package size={12} className="text-emerald-600" />
+              <span>{record.product_name}{record.location_name ? ` · ${record.location_name}` : ''}</span>
+            </div>
+          )}
         </div>
+
+        {!record?.check_in_at && (
+          <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-3 space-y-2">
+            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Sản phẩm điểm danh</p>
+            <ProductCheckInPicker
+              products={products}
+              loading={productsLoading}
+              selectedProductId={selectedProductId}
+              selectedLocationId={selectedLocationId}
+              onProductChange={handleProductChange}
+              onLocationChange={setSelectedLocationId}
+              variant="mobile"
+            />
+          </div>
+        )}
 
         {(message || error) && (
           <div
@@ -354,10 +425,10 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
 
       <div className="glass-card p-5 flex flex-col gap-4 mb-4">
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-on-surface">Tổng quan nhân sự</h3>
-          <button className="text-[12px] font-bold text-on-surface flex items-center gap-1 hover:opacity-80 transition-opacity">
-            Xem tất cả <ChevronRight size={14} />
-          </button>
+          <h3 className="text-sm font-bold text-on-surface">Tổng quan hôm nay</h3>
+          <Link to="/bao-cao" className="text-[12px] font-bold text-on-surface flex items-center gap-1 hover:opacity-80 transition-opacity">
+            Xem báo cáo <ChevronRight size={14} />
+          </Link>
         </div>
 
         <div className="flex items-center gap-6">
@@ -372,13 +443,19 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
                 stroke="var(--color-primary-container)"
                 strokeWidth="12"
                 strokeDasharray="251.2"
-                strokeDashoffset={251.2 * (1 - 0.76)}
+                strokeDashoffset={
+                  overview.total > 0
+                    ? 251.2 * (1 - overview.checkedIn / overview.total)
+                    : 251.2
+                }
                 strokeLinecap="round"
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-lg font-bold text-on-surface">128</span>
-              <span className="text-[10px] font-bold text-outline uppercase">Tổng số</span>
+              <span className="text-lg font-bold text-on-surface">
+                {overview.loading ? '—' : overview.total}
+              </span>
+              <span className="text-[10px] font-bold text-outline uppercase">Nhân sự</span>
             </div>
           </div>
 
@@ -388,21 +465,30 @@ export default function Home({ setScreen }: { setScreen?: (screen: Screen) => vo
                 <div className="w-2 h-2 rounded-full bg-primary-container" />
                 <span className="text-[12px] text-on-surface-variant font-medium">Đã check-in</span>
               </div>
-              <span className="text-[12px] font-bold">98 <span className="text-outline font-normal text-[10px]">(76%)</span></span>
+              <span className="text-[12px] font-bold">
+                {overview.loading ? '—' : overview.checkedIn}
+                {!overview.loading && overview.total > 0 && (
+                  <span className="text-outline font-normal text-[10px]">
+                    {' '}({Math.round((overview.checkedIn / overview.total) * 100)}%)
+                  </span>
+                )}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-secondary-container" />
                 <span className="text-[12px] text-on-surface-variant font-medium">Chưa check-in</span>
               </div>
-              <span className="text-[12px] font-bold">25 <span className="text-outline font-normal text-[10px]">(20%)</span></span>
+              <span className="text-[12px] font-bold">
+                {overview.loading ? '—' : overview.notCheckedIn}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-[12px] text-on-surface-variant font-medium">Vắng mặt</span>
+                <span className="text-[12px] text-on-surface-variant font-medium">Ghi nhận vắng</span>
               </div>
-              <span className="text-[12px] font-bold">5 <span className="text-outline font-normal text-[10px]">(4%)</span></span>
+              <span className="text-[12px] font-bold">{overview.loading ? '—' : overview.absent}</span>
             </div>
           </div>
         </div>
