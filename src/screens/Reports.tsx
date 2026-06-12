@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { AttendanceDbRecord } from '../types';
-import { currentEmployee, getAllEmployees, getAttendanceRecordsInRange, type EmployeeRecord } from '../lib/attendanceService';
+import { useEmployee } from '../context/EmployeeContext';
+import { getAllEmployees, getAttendanceRecordsInRange, type EmployeeRecord } from '../lib/attendanceService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage } from '../lib/supabase';
 import { isLate } from '../lib/attendanceUtils';
 import AttendanceStatusGrid from '../components/AttendanceStatusGrid';
@@ -101,6 +102,7 @@ function getWeekLabel(index: number) {
 }
 
 export default function Reports() {
+  const employee = useEmployee();
   const [period, setPeriod] = useState<PeriodKey>('current');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -215,10 +217,10 @@ export default function Reports() {
     >
       <div className="flex justify-between items-center py-3 bg-surface sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <UserAvatar name={currentEmployee.name || 'Jarviz'} size="sm" className="border border-outline-variant/30" />
+          <UserAvatar name={employee.name || 'Jarviz'} size="sm" className="border border-outline-variant/30" />
           <div>
             <p className="text-[10px] font-bold text-on-surface-variant leading-none">Xin chào,</p>
-            <h1 className="text-xl font-bold text-primary tracking-tight">{currentEmployee.name || 'Jarviz'}</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight">{employee.name || 'Jarviz'}</h1>
           </div>
         </div>
         <button className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:opacity-80 transition-all border border-outline-variant/10 shadow-sm active:scale-95">

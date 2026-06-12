@@ -16,7 +16,8 @@ import ProductSettingsPanel from '../components/ProductSettingsPanel';
 import { getAllProjects } from '../lib/projectService';
 import { getSupabaseConfigError } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
-import { currentEmployee, clearCurrentEmployee, getBrowserLocation } from '../lib/attendanceService';
+import { useEmployee } from '../context/EmployeeContext';
+import { clearCurrentEmployee, getBrowserLocation } from '../lib/attendanceService';
 import UserAvatar from '../components/UserAvatar';
 import {
   DEFAULT_APP_SETTINGS,
@@ -30,6 +31,7 @@ import {
 type SettingsPanel = 'shift' | 'location' | 'notification' | 'policy' | 'products' | null;
 
 export default function Settings() {
+  const employee = useEmployee();
   const [settings, setSettings] = useState<AppSettings>(() => getAppSettings());
   const [activePanel, setActivePanel] = useState<SettingsPanel>(null);
   const [productCount, setProductCount] = useState(0);
@@ -208,11 +210,11 @@ export default function Settings() {
 
       <div className="bg-white shadow-xl shadow-primary-container/5 rounded-3xl p-6 flex items-center gap-5 border border-surface-container-highest relative overflow-hidden group">
         <div className="absolute top-0 right-0 w-24 h-24 bg-primary-fixed/20 rounded-full blur-3xl -mr-12 -mt-12" />
-        <UserAvatar name={currentEmployee.name} size="lg" className="border-4 border-surface-container shadow-inner" />
+        <UserAvatar name={employee.name} size="lg" className="border-4 border-surface-container shadow-inner" />
         <div className="flex flex-col gap-1 min-w-0">
-          <h2 className="text-xl font-bold text-primary truncate leading-tight">{currentEmployee.name}</h2>
+          <h2 className="text-xl font-bold text-primary truncate leading-tight">{employee.name}</h2>
           <p className="text-[13px] font-medium text-on-surface-variant/80 truncate">
-            {currentEmployee.phone || currentEmployee.id}
+            {employee.phone || employee.id}
           </p>
         </div>
       </div>

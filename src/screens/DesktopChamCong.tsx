@@ -12,10 +12,10 @@ import {
 import ProductCheckInPicker from '../components/ProductCheckInPicker';
 import UserAvatar from '../components/UserAvatar';
 import { useProductCheckIn } from '../hooks/useProductCheckIn';
+import { useEmployee } from '../context/EmployeeContext';
 import {
   checkIn,
   checkOut,
-  currentEmployee,
   getBrowserLocation,
   getTodayAttendance,
 } from '../lib/attendanceService';
@@ -62,6 +62,7 @@ function formatLocationCompare(point: GeoPoint, projectId: string, projectName: 
 }
 
 export default function DesktopChamCong() {
+  const employee = useEmployee();
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<'check-in' | 'check-out' | null>(null);
@@ -179,10 +180,10 @@ export default function DesktopChamCong() {
           <h1 className="text-2xl font-bold text-primary">Điểm danh hôm nay</h1>
         </div>
         <div className="flex items-center gap-3">
-          <UserAvatar name={currentEmployee.name} size="sm" />
+          <UserAvatar name={employee.name} size="sm" />
           <div className="text-right">
-            <p className="text-sm font-bold text-primary">{currentEmployee.name}</p>
-            <p className="text-xs text-on-surface-variant">{currentEmployee.id}</p>
+            <p className="text-sm font-bold text-primary">{employee.name}</p>
+            <p className="text-xs text-on-surface-variant">{employee.id}</p>
           </div>
         </div>
       </div>

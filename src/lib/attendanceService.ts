@@ -18,19 +18,70 @@ function generateAnonymousId() {
   return 'ANON_' + Math.random().toString(36).substring(2, 11).toUpperCase();
 }
 
-function getEmployeeFromUrl(): EmployeeIdentity | null {
-  const params = new URLSearchParams(window.location.search);
-  const id = params.get('employeeId') || params.get('employee_id') || '';
-  const name = params.get('employeeName') || params.get('employee_name') || '';
-  const phone = params.get('employeePhone') || params.get('employee_phone') || '';
+function deriveEmployeeId(name: string) {
+  const slug = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
 
-  if (!id || !name) return null;
+  return slug || generateAnonymousId();
+}
+
+export function parseEmployeeFromUrl(search = window.location.search): EmployeeIdentity | null {
+  const params = new URLSearchParams(search);
+  const name = (
+    params.get('employeeName')
+    || params.get('employee_name')
+    || params.get('name')
+    || params.get('ten')
+    || params.get('full_name')
+    || params.get('fullName')
+    || params.get('hoTen')
+    || ''
+  ).trim();
+  const id = (
+    params.get('employeeId')
+    || params.get('employee_id')
+    || params.get('userId')
+    || params.get('user_id')
+    || params.get('id')
+    || ''
+  ).trim();
+  const phone = (
+    params.get('employeePhone')
+    || params.get('employee_phone')
+    || params.get('phone')
+    || ''
+  ).trim();
+
+  if (!name && !id) return null;
+
+  const resolvedName = name || id;
+  const resolvedId = id || deriveEmployeeId(resolvedName);
 
   return {
-    id,
-    name,
+    id: resolvedId,
+    name: resolvedName,
     phone: phone || undefined,
   };
+}
+
+export function syncEmployeeFromUrl(search = window.location.search): EmployeeIdentity | null {
+  const parsed = parseEmployeeFromUrl(search);
+  if (!parsed) return null;
+
+  currentEmployee.id = parsed.id;
+  currentEmployee.name = parsed.name;
+  currentEmployee.phone = parsed.phone;
+  localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(parsed));
+  return parsed;
+}
+
+function getEmployeeFromUrl(): EmployeeIdentity | null {
+  return parseEmployeeFromUrl(window.location.search);
 }
 
 export function getConfiguredEmployeeDefaults(): EmployeeIdentity | null {

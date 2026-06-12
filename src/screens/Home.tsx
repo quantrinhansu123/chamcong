@@ -19,10 +19,10 @@ import ProductCheckInPicker from '../components/ProductCheckInPicker';
 import { useProductCheckIn } from '../hooks/useProductCheckIn';
 import UserAvatar from '../components/UserAvatar';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage, isSupabaseConfigured } from '../lib/supabase';
+import { useEmployee } from '../context/EmployeeContext';
 import {
   checkIn,
   checkOut,
-  currentEmployee,
   getAllEmployees,
   getBrowserLocation,
   getTodayAttendance,
@@ -76,6 +76,7 @@ function getErrorMessage(err: unknown, fallback: string) {
 }
 
 export default function Home() {
+  const employee = useEmployee();
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -298,10 +299,10 @@ export default function Home() {
       <div className="header-bg -mx-5 px-5 pt-12 pb-20 mb-[-80px]">
         <div className="flex justify-between items-center mb-10">
           <div className="flex items-center gap-3">
-            <UserAvatar name={currentEmployee.name} size="md" className="border border-primary-fixed/20 shadow-lg" />
+            <UserAvatar name={employee.name} size="md" className="border border-primary-fixed/20 shadow-lg" />
             <div>
               <p className="text-[12px] text-white/70 font-medium">Xin chào,</p>
-              <h1 className="text-xl font-bold text-white tracking-tight">{currentEmployee.name}</h1>
+              <h1 className="text-xl font-bold text-white tracking-tight">{employee.name}</h1>
             </div>
           </div>
         </div>

@@ -13,10 +13,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { AttendanceDbRecord, AttendanceRecord } from '../types';
-import {
-  currentEmployee,
-  getEmployeeAttendanceRecords,
-} from '../lib/attendanceService';
+import { useEmployee } from '../context/EmployeeContext';
+import { getEmployeeAttendanceRecords } from '../lib/attendanceService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage } from '../lib/supabase';
 import { isLate } from '../lib/attendanceUtils';
 
@@ -80,6 +78,7 @@ function mapRecord(record: AttendanceDbRecord, now: Date): AttendanceRecord {
 }
 
 export default function History() {
+  const employee = useEmployee();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +95,11 @@ export default function History() {
       return;
     }
 
-    getEmployeeAttendanceRecords(currentEmployee.id, toDateKey(start), toDateKey(end))
+    getEmployeeAttendanceRecords(employee.id, toDateKey(start), toDateKey(end))
       .then((rows) => setRecords(rows.map((row) => mapRecord(row, now))))
       .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Không tải được lịch sử chấm công.')))
       .finally(() => setLoading(false));
-  }, [start, end, now]);
+  }, [employee.id, start, end, now]);
 
   const checkedIn = records.filter((r) => r.status !== 'absent');
   const lateCount = records.filter((r) => r.status === 'late').length;
