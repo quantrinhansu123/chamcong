@@ -13,7 +13,7 @@ import {
   Package,
 } from 'lucide-react';
 import ProductSettingsPanel from '../components/ProductSettingsPanel';
-import { getAllProductsWithLocations } from '../lib/productService';
+import { getAllProjects } from '../lib/projectService';
 import { getSupabaseConfigError } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { currentEmployee, clearCurrentEmployee, getBrowserLocation } from '../lib/attendanceService';
@@ -37,6 +37,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   const refreshSettings = useCallback(() => {
     const next = getAppSettings();
@@ -50,7 +51,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (getSupabaseConfigError()) return;
-    getAllProductsWithLocations()
+    getAllProjects()
       .then((rows) => setProductCount(rows.length))
       .catch(() => setProductCount(0));
   }, [activePanel]);
@@ -105,18 +106,40 @@ export default function Settings() {
     }
   };
 
-  const handleUseCurrentLocation = async () => {
+  const applyGpsToSettings = (point: { lat: number; lng: number }, saveImmediately = false) => {
+    const lat = point.lat.toFixed(6);
+    const lng = point.lng.toFixed(6);
+    const next = {
+      ...getAppSettings(),
+      officeLat: lat,
+      officeLng: lng,
+    };
+
+    if (saveImmediately) {
+      saveAppSettings(next);
+      refreshSettings();
+    }
+
+    setDraft((current) => ({ ...current, officeLat: lat, officeLng: lng }));
+    return { lat, lng };
+  };
+
+  const handleUseCurrentLocation = async (saveImmediately = false) => {
     setLocating(true);
     setFormError(null);
+    setLocationMessage(null);
     try {
       const point = await getBrowserLocation();
-      setDraft((current) => ({
-        ...current,
-        officeLat: point.lat.toFixed(6),
-        officeLng: point.lng.toFixed(6),
-      }));
+      applyGpsToSettings(point, saveImmediately);
+      setLocationMessage(
+        saveImmediately
+          ? `Đã lưu vị trí: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`
+          : `Đã điền vị trí: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`,
+      );
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Không lấy được vị trí GPS.');
+      const message = err instanceof Error ? err.message : 'Không lấy được vị trí GPS.';
+      setFormError(message);
+      setLocationMessage(null);
     } finally {
       setLocating(false);
     }
@@ -139,8 +162,8 @@ export default function Settings() {
     {
       id: 'products' as const,
       icon: Package,
-      label: 'Sản phẩm',
-      subtitle: productCount ? `${productCount} sản phẩm` : 'Thêm sản phẩm & vị trí',
+      label: 'Dự án',
+      subtitle: productCount ? `${productCount} dự án` : 'Từ bảng projects',
     },
     {
       id: 'location' as const,
@@ -164,7 +187,7 @@ export default function Settings() {
 
   const panelTitle =
     activePanel === 'shift' ? 'Ca làm việc'
-    : activePanel === 'products' ? 'Sản phẩm & vị trí'
+    : activePanel === 'products' ? 'Dự án'
     : activePanel === 'location' ? 'Địa điểm văn phòng'
     : activePanel === 'notification' ? 'Thông báo'
     : activePanel === 'policy' ? 'Chính sách chấm công'
@@ -192,6 +215,45 @@ export default function Settings() {
             {currentEmployee.phone || currentEmployee.id}
           </p>
         </div>
+      </div>
+
+      <div className="bg-white shadow-xl shadow-primary-container/5 rounded-3xl p-5 border border-surface-container-highest flex flex-col gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <MapPin size={22} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Vị trí GPS</p>
+            <p className="text-sm font-bold text-primary mt-1 truncate">
+              {settings.officeLat && settings.officeLng
+                ? `${settings.officeLat}, ${settings.officeLng}`
+                : 'Chưa có vị trí'}
+            </p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">
+              {settings.officeName || 'Địa điểm văn phòng'} · bán kính {settings.officeRadiusM}m
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleUseCurrentLocation(true)}
+          disabled={locating}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 active:scale-[0.99] transition-all"
+        >
+          {locating ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
+          Lấy vị trí
+        </button>
+        {(locationMessage || formError) && (
+          <p
+            className={`text-[12px] font-medium rounded-xl px-3 py-2 ${
+              formError
+                ? 'text-red-700 bg-red-50 border border-red-100'
+                : 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+            }`}
+          >
+            {formError || locationMessage}
+          </p>
+        )}
       </div>
 
       <div className="bg-white shadow-xl shadow-primary-container/5 rounded-3xl flex flex-col overflow-hidden border border-surface-container-highest">
@@ -301,12 +363,33 @@ export default function Settings() {
 
                 {activePanel === 'location' && (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => handleUseCurrentLocation(false)}
+                      disabled={locating}
+                      className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      {locating ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
+                      Lấy vị trí
+                    </button>
                     <Field label="Tên địa điểm">
                       <input
                         value={draft.officeName}
                         onChange={(e) => setDraft({ ...draft, officeName: e.target.value })}
                         className={inputClass}
                         placeholder="Văn phòng Jarviz"
+                      />
+                    </Field>
+                    <Field label="Vị trí (tự điền khi bấm Lấy vị trí)">
+                      <input
+                        readOnly
+                        value={
+                          draft.officeLat && draft.officeLng
+                            ? `${draft.officeLat}, ${draft.officeLng}`
+                            : ''
+                        }
+                        placeholder="Bấm Lấy vị trí để điền"
+                        className={`${inputClass} bg-surface-container-low`}
                       />
                     </Field>
                     <div className="grid grid-cols-2 gap-3">
@@ -327,15 +410,6 @@ export default function Settings() {
                         />
                       </Field>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleUseCurrentLocation}
-                      disabled={locating}
-                      className="flex items-center justify-center gap-2 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-bold"
-                    >
-                      {locating ? <Loader2 size={16} className="animate-spin" /> : <LocateFixed size={16} />}
-                      Lấy vị trí hiện tại
-                    </button>
                     <Field label="Bán kính cho phép (mét)">
                       <input
                         type="number"

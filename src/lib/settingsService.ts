@@ -61,3 +61,164 @@ export function formatLocationSummary(settings: AppSettings = getAppSettings()) 
   }
   return settings.officeName || 'Chưa cấu hình GPS văn phòng';
 }
+
+export interface OfficeLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+}
+
+export function getOfficeLocation(settings: AppSettings = getAppSettings()): OfficeLocation | null {
+  const lat = Number(settings.officeLat);
+  const lng = Number(settings.officeLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  return {
+    name: settings.officeName.trim() || DEFAULT_APP_SETTINGS.officeName,
+    lat,
+    lng,
+    radiusM: Math.max(50, Number(settings.officeRadiusM) || DEFAULT_APP_SETTINGS.officeRadiusM),
+  };
+}
+
+export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusM = 6_371_000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+
+  return earthRadiusM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function compareWithOffice(
+  point: { lat: number; lng: number },
+  settings: AppSettings = getAppSettings(),
+) {
+  const office = getOfficeLocation(settings);
+  if (!office) {
+    return { configured: false as const, office: null, distanceM: 0, withinRadius: false };
+  }
+
+  const distanceM = distanceMeters(point.lat, point.lng, office.lat, office.lng);
+  return {
+    configured: true as const,
+    office,
+    distanceM,
+    withinRadius: distanceM <= office.radiusM,
+  };
+}
+
+export function assertWithinOfficeRadius(point: { lat: number; lng: number }) {
+  const result = compareWithOffice(point);
+  if (!result.configured || !result.office) {
+    throw new Error('Chưa cấu hình vị trí chấm công. Vào Cài đặt → Lấy vị trí.');
+  }
+
+  if (!result.withinRadius) {
+    throw new Error(
+      `Bạn đang cách ${result.office.name} ${Math.round(result.distanceM)}m, vượt quá bán kính ${result.office.radiusM}m.`,
+    );
+  }
+
+  return result;
+}
+
+const PROJECT_LOCATIONS_KEY = 'jarviz_project_locations';
+
+type ProjectLocationRecord = {
+  lat: string;
+  lng: string;
+  radiusM: number;
+  updatedAt: string;
+};
+
+function readProjectLocations(): Record<string, ProjectLocationRecord> {
+  try {
+    const stored = localStorage.getItem(PROJECT_LOCATIONS_KEY);
+    if (!stored) return {};
+    return JSON.parse(stored) as Record<string, ProjectLocationRecord>;
+  } catch {
+    return {};
+  }
+}
+
+export function saveProjectLocation(
+  projectId: string,
+  point: { lat: number; lng: number },
+  radiusM = getAppSettings().officeRadiusM,
+) {
+  const store = readProjectLocations();
+  store[projectId] = {
+    lat: point.lat.toFixed(6),
+    lng: point.lng.toFixed(6),
+    radiusM: Math.max(50, Number(radiusM) || DEFAULT_APP_SETTINGS.officeRadiusM),
+    updatedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(PROJECT_LOCATIONS_KEY, JSON.stringify(store));
+}
+
+export function getProjectLocation(projectId: string, projectName?: string): OfficeLocation | null {
+  const record = readProjectLocations()[projectId];
+  if (!record) return null;
+
+  const lat = Number(record.lat);
+  const lng = Number(record.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  return {
+    name: projectName?.trim() || 'Dự án',
+    lat,
+    lng,
+    radiusM: record.radiusM,
+  };
+}
+
+export function getCheckInLocation(projectId?: string, projectName?: string): OfficeLocation | null {
+  if (projectId) {
+    const projectLocation = getProjectLocation(projectId, projectName);
+    if (projectLocation) return projectLocation;
+  }
+  return getOfficeLocation();
+}
+
+export function compareWithCheckInLocation(
+  point: { lat: number; lng: number },
+  projectId?: string,
+  projectName?: string,
+) {
+  const office = getCheckInLocation(projectId, projectName);
+  if (!office) {
+    return { configured: false as const, office: null, distanceM: 0, withinRadius: false };
+  }
+
+  const distanceM = distanceMeters(point.lat, point.lng, office.lat, office.lng);
+  return {
+    configured: true as const,
+    office,
+    distanceM,
+    withinRadius: distanceM <= office.radiusM,
+  };
+}
+
+export function assertWithinCheckInRadius(
+  point: { lat: number; lng: number },
+  projectId?: string,
+  projectName?: string,
+) {
+  const result = compareWithCheckInLocation(point, projectId, projectName);
+  if (!result.configured || !result.office) {
+    throw new Error('Chưa cấu hình vị trí cho dự án này. Vào Cài đặt → Dự án → Lấy vị trí.');
+  }
+
+  if (!result.withinRadius) {
+    throw new Error(
+      `Bạn đang cách ${result.office.name} ${Math.round(result.distanceM)}m, vượt quá bán kính ${result.office.radiusM}m.`,
+    );
+  }
+
+  return result;
+}

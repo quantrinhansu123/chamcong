@@ -30,6 +30,8 @@ import {
   saveTodayLocation,
 } from '../lib/attendanceService';
 import { formatDurationShort, getOvertimeMinutes } from '../lib/attendanceUtils';
+import { assertWithinCheckInRadius, compareWithCheckInLocation } from '../lib/settingsService';
+import { ROUTES } from '../types';
 
 const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
@@ -81,6 +83,7 @@ export default function Home() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationCompareText, setLocationCompareText] = useState<string | null>(null);
   const [overview, setOverview] = useState({
     total: 0,
     checkedIn: 0,
@@ -92,11 +95,12 @@ export default function Home() {
     products,
     loading: productsLoading,
     selectedProductId,
-    selectedLocationId,
+    selectedProjectName,
+    officeLocation,
     handleProductChange,
-    setSelectedLocationId,
     selection: productSelection,
     canCheckIn,
+    loadError: projectsLoadError,
   } = useProductCheckIn();
 
   useEffect(() => {
@@ -126,7 +130,7 @@ export default function Home() {
 
     Promise.all([getAllEmployees(), getTodayAttendanceForAll()])
       .then(([employees, todayRecords]) => {
-        const activeEmployees = employees.filter((emp) => emp.status === 'active');
+        const activeEmployees = employees.filter((emp) => !emp.status || emp.status === 'active');
         const checkedInIds = new Set(
           todayRecords.filter((row) => row.check_in_at).map((row) => row.employee_id),
         );
@@ -157,6 +161,20 @@ export default function Home() {
     if (!record?.last_lat || !record?.last_lng) return 'Chưa ghi nhận GPS';
     return `${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`;
   }, [record?.last_lat, record?.last_lng]);
+
+  const formatLocationCompare = (point: GeoPoint) => {
+    const result = compareWithCheckInLocation(point, selectedProductId, selectedProjectName);
+    if (!result.configured || !result.office) {
+      return 'Chưa cấu hình vị trí chấm công trong Cài đặt.';
+    }
+
+    const distance = Math.round(result.distanceM);
+    if (result.withinRadius) {
+      return `Trong phạm vi ${result.office.name} (${distance}m / ${result.office.radiusM}m)`;
+    }
+
+    return `Ngoài phạm vi ${result.office.name} (${distance}m, cho phép ${result.office.radiusM}m)`;
+  };
 
   const getLocationForAttendance = async (): Promise<{ location: GeoPoint | null; warning: string | null }> => {
     try {
@@ -206,18 +224,28 @@ export default function Home() {
   const handleCheckIn = () => {
     if (record?.check_in_at) return;
     if (!productSelection) {
-      setError('Vui lòng chọn sản phẩm và vị trí trước khi check-in.');
+      setError(
+        officeLocation
+          ? 'Vui lòng chọn dự án trước khi check-in.'
+          : 'Chưa cấu hình vị trí cho dự án. Vào Cài đặt → Dự án → Lấy vị trí.',
+      );
       return;
     }
     runAction('check-in', async () => {
       const { location, warning } = await getLocationForAttendance();
+      if (location) {
+        assertWithinCheckInRadius(location, selectedProductId, selectedProjectName);
+        setLocationCompareText(formatLocationCompare(location));
+      }
       const updatedRecord = await checkIn(location, productSelection);
       return {
         record: updatedRecord,
         locationError: warning,
         message: warning
           ? 'Đã lưu check-in, nhưng chưa lấy được GPS. Bấm Thử lại ở phần Vị trí hiện tại để cập nhật sau.'
-          : 'Đã lưu check-in vào Supabase.',
+          : location
+            ? `Check-in thành công. ${formatLocationCompare(location)}`
+            : 'Đã lưu check-in vào Supabase.',
       };
     });
   };
@@ -240,11 +268,13 @@ export default function Home() {
   const handleSaveLocation = () => {
     runAction('location', async () => {
       const location = await getBrowserLocation();
+      const compareText = formatLocationCompare(location);
+      setLocationCompareText(compareText);
       const updatedRecord = await saveTodayLocation(location);
       return {
         record: updatedRecord,
         locationError: null,
-        message: 'Đã lưu GPS vào Supabase.',
+        message: compareText,
       };
     });
   };
@@ -304,16 +334,31 @@ export default function Home() {
 
         {!record?.check_in_at && (
           <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-3 space-y-2">
-            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Sản phẩm điểm danh</p>
+            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Dự án chấm công</p>
             <ProductCheckInPicker
               products={products}
               loading={productsLoading}
+              loadError={projectsLoadError}
               selectedProductId={selectedProductId}
-              selectedLocationId={selectedLocationId}
               onProductChange={handleProductChange}
-              onLocationChange={setSelectedLocationId}
-              variant="mobile"
+              compact
             />
+            {officeLocation ? (
+              <p className="text-[10px] text-on-surface-variant">
+                Vị trí chấm công: <span className="font-bold text-primary">{officeLocation.name}</span>
+                {' '}· bán kính {officeLocation.radiusM}m
+                {' '}(
+                {officeLocation.lat.toFixed(6)}, {officeLocation.lng.toFixed(6)}
+                )
+              </p>
+            ) : (
+              <p className="text-[10px] text-amber-700">
+                Chưa cấu hình vị trí.{' '}
+                <Link to={ROUTES.settings} className="font-bold underline">
+                  Vào Cài đặt → Dự án → Lấy vị trí
+                </Link>
+              </p>
+            )}
           </div>
         )}
 
@@ -376,8 +421,17 @@ export default function Home() {
             {locationError ? 'Chưa lấy được GPS' : locationText}
           </h3>
           <p className={`text-[12px] leading-relaxed ${locationError ? 'text-red-700' : 'text-on-surface-variant'}`}>
-            {locationError || (record?.location_accuracy_m ? `Độ chính xác khoảng ${Math.round(Number(record.location_accuracy_m))}m` : 'Bấm để lấy GPS hiện tại')}
+            {locationError
+              || locationCompareText
+              || (officeLocation
+                ? `So sánh với ${officeLocation.name} (bán kính ${officeLocation.radiusM}m)`
+                : 'Cấu hình vị trí trong Cài đặt trước khi chấm công')}
           </p>
+          {!locationError && record?.location_accuracy_m && (
+            <p className="text-[11px] text-on-surface-variant mt-1">
+              Độ chính xác khoảng {Math.round(Number(record.location_accuracy_m))}m
+            </p>
+          )}
           {locationError && (
             <p className="text-[12px] font-extrabold text-primary-container mt-2">Thử lại</p>
           )}

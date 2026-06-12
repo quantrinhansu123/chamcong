@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -18,8 +19,9 @@ import {
   getBrowserLocation,
   getTodayAttendance,
 } from '../lib/attendanceService';
+import { assertWithinCheckInRadius, compareWithCheckInLocation } from '../lib/settingsService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage, isSupabaseConfigured } from '../lib/supabase';
-import type { AttendanceDbRecord, GeoPoint } from '../types';
+import { ROUTES, type AttendanceDbRecord, type GeoPoint } from '../types';
 
 function formatTime(value?: string | null) {
   if (!value) return '--:--';
@@ -45,6 +47,20 @@ function getStatusLabel(record: AttendanceDbRecord | null) {
   return 'Đang làm việc';
 }
 
+function formatLocationCompare(point: GeoPoint, projectId: string, projectName: string) {
+  const result = compareWithCheckInLocation(point, projectId, projectName);
+  if (!result.configured || !result.office) {
+    return 'Chưa cấu hình vị trí chấm công trong Cài đặt.';
+  }
+
+  const distance = Math.round(result.distanceM);
+  if (result.withinRadius) {
+    return `Trong phạm vi ${result.office.name} (${distance}m / ${result.office.radiusM}m)`;
+  }
+
+  return `Ngoài phạm vi ${result.office.name} (${distance}m, cho phép ${result.office.radiusM}m)`;
+}
+
 export default function DesktopChamCong() {
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,11 +73,12 @@ export default function DesktopChamCong() {
     products,
     loading: productsLoading,
     selectedProductId,
-    selectedLocationId,
+    selectedProjectName,
+    officeLocation,
     handleProductChange,
-    setSelectedLocationId,
     selection,
     canCheckIn,
+    loadError: projectsLoadError,
   } = useProductCheckIn();
 
   useEffect(() => {
@@ -98,7 +115,13 @@ export default function DesktopChamCong() {
 
   const handleCheckIn = async () => {
     if (record?.check_in_at || !selection) {
-      if (!selection) setError('Vui lòng chọn sản phẩm và vị trí trước khi chấm công.');
+      if (!selection) {
+        setError(
+          officeLocation
+            ? 'Vui lòng chọn dự án trước khi chấm công.'
+            : 'Chưa cấu hình vị trí cho dự án. Vào Cài đặt → Dự án → Lấy vị trí.',
+        );
+      }
       return;
     }
 
@@ -107,9 +130,13 @@ export default function DesktopChamCong() {
     setMessage(null);
     try {
       const location = await getLocation();
+      if (!location) {
+        throw new Error('Không lấy được vị trí GPS. Hãy bật quyền truy cập vị trí rồi thử lại.');
+      }
+      assertWithinCheckInRadius(location, selectedProductId, selectedProjectName);
       const updated = await checkIn(location, selection);
       setRecord(updated);
-      setMessage(location ? 'Chấm công thành công.' : 'Đã chấm công (chưa có GPS).');
+      setMessage(`Chấm công thành công. ${formatLocationCompare(location, selectedProductId, selectedProjectName)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không chấm công được.');
     } finally {
@@ -127,7 +154,11 @@ export default function DesktopChamCong() {
       const location = await getLocation();
       const updated = await checkOut(record, location);
       setRecord(updated);
-      setMessage('Check-out thành công.');
+      setMessage(
+        location
+          ? `Check-out thành công. ${formatLocationCompare(location, selectedProductId, selectedProjectName)}`
+          : 'Check-out thành công.',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không check-out được.');
     } finally {
@@ -160,19 +191,33 @@ export default function DesktopChamCong() {
         <section className="bg-white rounded-2xl border border-outline-variant/15 p-6 space-y-5">
           <div className="flex items-center gap-2 text-emerald-700">
             <Package size={18} />
-            <h2 className="font-bold">Chọn sản phẩm</h2>
+            <h2 className="font-bold">Chọn dự án</h2>
           </div>
 
           {!record?.check_in_at ? (
-            <ProductCheckInPicker
-              products={products}
-              loading={productsLoading}
-              selectedProductId={selectedProductId}
-              selectedLocationId={selectedLocationId}
-              onProductChange={handleProductChange}
-              onLocationChange={setSelectedLocationId}
-              variant="desktop"
-            />
+            <div className="space-y-2">
+              <ProductCheckInPicker
+                products={products}
+                loading={productsLoading}
+                loadError={projectsLoadError}
+                selectedProductId={selectedProductId}
+                onProductChange={handleProductChange}
+              />
+              {officeLocation ? (
+                <p className="text-xs text-on-surface-variant">
+                  Vị trí chấm công: <span className="font-bold text-primary">{officeLocation.name}</span>
+                  {' '}· bán kính {officeLocation.radiusM}m
+                  {' '}({officeLocation.lat.toFixed(6)}, {officeLocation.lng.toFixed(6)})
+                </p>
+              ) : (
+                <p className="text-xs text-amber-700">
+                  Chưa cấu hình vị trí.{' '}
+                  <Link to={ROUTES.settings} className="font-bold underline">
+                    Vào Cài đặt → Dự án → Lấy vị trí
+                  </Link>
+                </p>
+              )}
+            </div>
           ) : (
             <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
               <p className="text-sm font-bold text-emerald-800">{record.product_name || '—'}</p>
@@ -235,8 +280,13 @@ export default function DesktopChamCong() {
           <div className="flex items-start gap-3 rounded-xl bg-surface-container-low px-4 py-3">
             <MapPin size={18} className="text-on-surface-variant shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-bold text-on-surface-variant uppercase">GPS</p>
+              <p className="text-xs font-bold text-on-surface-variant uppercase">GPS hiện tại</p>
               <p className="text-sm font-medium text-on-surface">{locationText}</p>
+              {officeLocation && (
+                <p className="text-xs text-on-surface-variant mt-1">
+                  So sánh với {officeLocation.name} · bán kính {officeLocation.radiusM}m
+                </p>
+              )}
             </div>
           </div>
         </section>

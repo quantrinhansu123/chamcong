@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getActiveProductsWithLocations } from '../lib/productService';
+import { getProjectsForCheckIn } from '../lib/projectService';
+import { getCheckInLocation } from '../lib/settingsService';
 import { getSupabaseConfigError } from '../lib/supabase';
 import type { CheckInProductSelection, ProductWithLocations } from '../types';
 
 export function useProductCheckIn() {
-  const [products, setProducts] = useState<ProductWithLocations[]>([]);
+  const [projects, setProjects] = useState<ProductWithLocations[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (getSupabaseConfigError()) {
@@ -15,50 +16,46 @@ export function useProductCheckIn() {
       return;
     }
 
-    getActiveProductsWithLocations()
+    getProjectsForCheckIn()
       .then((rows) => {
-        setProducts(rows);
+        setProjects(rows);
+        setLoadError(null);
         if (rows.length === 1) {
           setSelectedProductId(rows[0].id);
-          if (rows[0].locations.length === 1) {
-            setSelectedLocationId(rows[0].locations[0].id);
-          }
         }
       })
-      .catch(() => setProducts([]))
+      .catch((err) => {
+        setProjects([]);
+        setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách dự án.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const handleProductChange = (productId: string) => {
-    setSelectedProductId(productId);
-    const product = products.find((p) => p.id === productId);
-    if (product?.locations.length === 1) {
-      setSelectedLocationId(product.locations[0].id);
-    } else {
-      setSelectedLocationId('');
-    }
-  };
+  const selectedProject = projects.find((p) => p.id === selectedProductId) ?? null;
+  const checkInLocation = getCheckInLocation(selectedProductId, selectedProject?.name);
 
   const selection = useMemo((): CheckInProductSelection | null => {
-    const product = products.find((p) => p.id === selectedProductId);
-    const location = product?.locations.find((l) => l.id === selectedLocationId);
-    if (!product || !location) return null;
+    const project = projects.find((p) => p.id === selectedProductId);
+    const location = getCheckInLocation(selectedProductId, project?.name);
+    if (!project || !location) return null;
+
     return {
-      productId: product.id,
-      productLocationId: location.id,
-      productName: product.name,
+      productId: project.id,
+      productLocationId: `loc-${location.lat}-${location.lng}`,
+      productName: project.name,
       locationName: location.name,
     };
-  }, [products, selectedProductId, selectedLocationId]);
+  }, [projects, selectedProductId, checkInLocation?.lat, checkInLocation?.lng, checkInLocation?.name]);
 
   return {
-    products,
+    products: projects,
     loading,
+    loadError,
     selectedProductId,
-    selectedLocationId,
-    handleProductChange,
-    setSelectedLocationId,
+    selectedProjectName: selectedProject?.name ?? '',
+    officeLocation: checkInLocation,
+    handleProductChange: setSelectedProductId,
     selection,
-    canCheckIn: Boolean(selection) && products.length > 0,
+    canCheckIn: Boolean(selection) && projects.length > 0,
   };
 }
