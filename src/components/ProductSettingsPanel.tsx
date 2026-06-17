@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, LocateFixed } from 'lucide-react';
 import { getBrowserLocation } from '../lib/attendanceService';
 import { getAllProjects } from '../lib/projectService';
-import { getProjectLocation, saveProjectLocation } from '../lib/settingsService';
+import { getAppSettings, getProjectLocation, saveProjectLocation } from '../lib/settingsService';
 import { getSupabaseRequestErrorMessage } from '../lib/supabase';
 import type { ProductWithLocations } from '../types';
 
@@ -24,14 +24,27 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
   const [locating, setLocating] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [locationLabel, setLocationLabel] = useState('');
+  const [draftLocation, setDraftLocation] = useState({
+    lat: '',
+    lng: '',
+    radiusM: getAppSettings().officeRadiusM,
+  });
 
   const refreshLocationLabel = useCallback((projectId: string, projectName?: string) => {
     if (!projectId) {
       setLocationLabel('');
+      setDraftLocation({ lat: '', lng: '', radiusM: getAppSettings().officeRadiusM });
       return;
     }
     const saved = getProjectLocation(projectId, projectName);
-    setLocationLabel(saved ? `${saved.lat.toFixed(6)}, ${saved.lng.toFixed(6)}` : '');
+    if (!saved) {
+      setLocationLabel('');
+      setDraftLocation({ lat: '', lng: '', radiusM: getAppSettings().officeRadiusM });
+      return;
+    }
+
+    setLocationLabel(`${saved.lat.toFixed(6)}, ${saved.lng.toFixed(6)}`);
+    setDraftLocation({ lat: saved.lat.toFixed(6), lng: saved.lng.toFixed(6), radiusM: saved.radiusM });
   }, []);
 
   const loadProjects = useCallback(async () => {
@@ -76,11 +89,38 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
       saveProjectLocation(selectedProject.id, point);
       const label = `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
       setLocationLabel(label);
+      setDraftLocation({ lat: point.lat.toFixed(6), lng: point.lng.toFixed(6), radiusM: getAppSettings().officeRadiusM });
       setSuccess(`Đã lưu vị trí cho dự án "${selectedProject.name}".`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không lấy được vị trí GPS.');
     } finally {
       setLocating(false);
+    }
+  };
+
+  const handleSaveLocation = async () => {
+    if (!selectedProject) {
+      setError('Vui lòng chọn dự án trước.');
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+
+    const lat = Number(draftLocation.lat);
+    const lng = Number(draftLocation.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setError('Vui lòng nhập tọa độ lat và lng hợp lệ.');
+      return;
+    }
+
+    try {
+      saveProjectLocation(selectedProject.id, { lat, lng }, draftLocation.radiusM);
+      const label = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setLocationLabel(label);
+      setSuccess(`Đã lưu tọa độ cho dự án "${selectedProject.name}".`);
+    } catch {
+      setError('Không lưu được tọa độ.');
     }
   };
 
@@ -126,26 +166,71 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
       )}
 
       {selectedProject && (
-        <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 px-3 py-3 space-y-3">
+        <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 px-3 py-3 space-y-4">
           <p className="text-[11px] font-bold text-on-surface-variant uppercase">Vị trí chấm công</p>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-on-surface-variant">Tọa độ GPS</label>
-            <input
-              readOnly
-              value={locationLabel}
-              placeholder="Bấm Lấy vị trí để điền"
-              className={inputClass}
-            />
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-on-surface-variant">Vĩ độ (lat)</label>
+              <input
+                value={draftLocation.lat}
+                onChange={(e) => setDraftLocation((current) => ({ ...current, lat: e.target.value }))}
+                placeholder="21.028511"
+                className={inputClass}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-on-surface-variant">Kinh độ (lng)</label>
+              <input
+                value={draftLocation.lng}
+                onChange={(e) => setDraftLocation((current) => ({ ...current, lng: e.target.value }))}
+                placeholder="105.804817"
+                className={inputClass}
+              />
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={handleCaptureLocation}
-            disabled={locating}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {locating ? <Loader2 size={16} className="animate-spin" /> : <LocateFixed size={16} />}
-            Lấy vị trí
-          </button>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-on-surface-variant">Bán kính (m)</label>
+              <input
+                type="number"
+                min={50}
+                value={draftLocation.radiusM}
+                onChange={(e) => setDraftLocation((current) => ({ ...current, radiusM: Number(e.target.value) }))}
+                className={inputClass}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-on-surface-variant">Tọa độ đã lưu</label>
+              <input
+                readOnly
+                value={locationLabel}
+                placeholder="Chưa có tọa độ"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleCaptureLocation}
+              disabled={locating}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {locating ? <Loader2 size={16} className="animate-spin" /> : <LocateFixed size={16} />}
+              Lấy vị trí
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveLocation}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-white text-sm font-bold hover:bg-slate-900 disabled:opacity-60"
+            >
+              Lưu tọa độ
+            </button>
+          </div>
+
           <p className="text-[10px] text-on-surface-variant">
             Vị trí này dùng để so sánh khi chấm công dự án <span className="font-bold">{selectedProject.name}</span>.
           </p>
