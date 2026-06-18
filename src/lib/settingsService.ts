@@ -127,91 +127,30 @@ export function assertWithinOfficeRadius(point: { lat: number; lng: number }) {
   return result;
 }
 
-const PROJECT_LOCATIONS_KEY = 'jarviz_project_locations';
-
-type ProjectLocationRecord = {
-  lat: string;
-  lng: string;
-  radiusM: number;
-  updatedAt: string;
-};
-
-function readProjectLocations(): Record<string, ProjectLocationRecord> {
-  try {
-    const stored = localStorage.getItem(PROJECT_LOCATIONS_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as Record<string, ProjectLocationRecord>;
-  } catch {
-    return {};
-  }
-}
-
-export function saveProjectLocation(
-  projectId: string,
+export function compareWithLocation(
   point: { lat: number; lng: number },
-  radiusM = getAppSettings().officeRadiusM,
+  location: OfficeLocation | null,
 ) {
-  const store = readProjectLocations();
-  store[projectId] = {
-    lat: point.lat.toFixed(6),
-    lng: point.lng.toFixed(6),
-    radiusM: Math.max(50, Number(radiusM) || DEFAULT_APP_SETTINGS.officeRadiusM),
-    updatedAt: new Date().toISOString(),
-  };
-  localStorage.setItem(PROJECT_LOCATIONS_KEY, JSON.stringify(store));
-}
-
-export function getProjectLocation(projectId: string, projectName?: string): OfficeLocation | null {
-  const record = readProjectLocations()[projectId];
-  if (!record) return null;
-
-  const lat = Number(record.lat);
-  const lng = Number(record.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-  return {
-    name: projectName?.trim() || 'Dự án',
-    lat,
-    lng,
-    radiusM: record.radiusM,
-  };
-}
-
-export function getCheckInLocation(projectId?: string, projectName?: string): OfficeLocation | null {
-  if (projectId) {
-    const projectLocation = getProjectLocation(projectId, projectName);
-    if (projectLocation) return projectLocation;
-  }
-  return getOfficeLocation();
-}
-
-export function compareWithCheckInLocation(
-  point: { lat: number; lng: number },
-  projectId?: string,
-  projectName?: string,
-) {
-  const office = getCheckInLocation(projectId, projectName);
-  if (!office) {
+  if (!location) {
     return { configured: false as const, office: null, distanceM: 0, withinRadius: false };
   }
 
-  const distanceM = distanceMeters(point.lat, point.lng, office.lat, office.lng);
+  const distanceM = distanceMeters(point.lat, point.lng, location.lat, location.lng);
   return {
     configured: true as const,
-    office,
+    office: location,
     distanceM,
-    withinRadius: distanceM <= office.radiusM,
+    withinRadius: distanceM <= location.radiusM,
   };
 }
 
-export function assertWithinCheckInRadius(
+export function assertWithinLocation(
   point: { lat: number; lng: number },
-  projectId?: string,
-  projectName?: string,
+  location: OfficeLocation | null,
 ) {
-  const result = compareWithCheckInLocation(point, projectId, projectName);
+  const result = compareWithLocation(point, location);
   if (!result.configured || !result.office) {
-    throw new Error('Chưa cấu hình vị trí cho dự án này. Vào Cài đặt → Dự án → Lấy vị trí.');
+    throw new Error('Chưa cấu hình vị trí cho dự án này. Vào Cài đặt → Dự án → Lưu tọa độ.');
   }
 
   if (!result.withinRadius) {
@@ -221,4 +160,22 @@ export function assertWithinCheckInRadius(
   }
 
   return result;
+}
+
+export function compareWithCheckInLocation(
+  point: { lat: number; lng: number },
+  projectId?: string,
+  projectName?: string,
+) {
+  void projectId;
+  void projectName;
+  return compareWithLocation(point, getOfficeLocation());
+}
+
+export function assertWithinCheckInRadius(
+  point: { lat: number; lng: number },
+  _projectId?: string,
+  _projectName?: string,
+) {
+  return assertWithinLocation(point, getOfficeLocation());
 }

@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getProjectsForCheckIn } from '../lib/projectService';
-import { getCheckInLocation } from '../lib/settingsService';
+import {
+  getProjectLocationFromDb,
+  PROJECT_LOCATION_UPDATED_EVENT,
+} from '../lib/projectLocationService';
+import { getOfficeLocation, type OfficeLocation } from '../lib/settingsService';
 import { getSupabaseConfigError } from '../lib/supabase';
 import type { CheckInProductSelection, ProductWithLocations } from '../types';
 
 export function useProductCheckIn() {
   const [projects, setProjects] = useState<ProductWithLocations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [locationLoading, setLocationLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [checkInLocation, setCheckInLocation] = useState<OfficeLocation | null>(null);
 
   useEffect(() => {
     if (getSupabaseConfigError()) {
@@ -32,24 +38,55 @@ export function useProductCheckIn() {
   }, []);
 
   const selectedProject = projects.find((p) => p.id === selectedProductId) ?? null;
-  const checkInLocation = getCheckInLocation(selectedProductId, selectedProject?.name);
+
+  const loadProjectLocation = useCallback(async (projectId: string, projectName?: string) => {
+    if (!projectId) {
+      setCheckInLocation(null);
+      return;
+    }
+
+    setLocationLoading(true);
+    try {
+      const fromDb = await getProjectLocationFromDb(projectId, projectName);
+      setCheckInLocation(fromDb ?? getOfficeLocation());
+    } catch {
+      setCheckInLocation(getOfficeLocation());
+    } finally {
+      setLocationLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProjectLocation(selectedProductId, selectedProject?.name);
+  }, [selectedProductId, selectedProject?.name, loadProjectLocation]);
+
+  useEffect(() => {
+    const handleUpdated = (event: Event) => {
+      const projectId = (event as CustomEvent<{ projectId: string }>).detail?.projectId;
+      if (projectId && projectId === selectedProductId) {
+        loadProjectLocation(selectedProductId, selectedProject?.name);
+      }
+    };
+
+    window.addEventListener(PROJECT_LOCATION_UPDATED_EVENT, handleUpdated);
+    return () => window.removeEventListener(PROJECT_LOCATION_UPDATED_EVENT, handleUpdated);
+  }, [selectedProductId, selectedProject?.name, loadProjectLocation]);
 
   const selection = useMemo((): CheckInProductSelection | null => {
     const project = projects.find((p) => p.id === selectedProductId);
-    const location = getCheckInLocation(selectedProductId, project?.name);
-    if (!project || !location) return null;
+    if (!project || !checkInLocation) return null;
 
     return {
       productId: project.id,
-      productLocationId: `loc-${location.lat}-${location.lng}`,
+      productLocationId: `loc-${checkInLocation.lat}-${checkInLocation.lng}`,
       productName: project.name,
-      locationName: location.name,
+      locationName: checkInLocation.name,
     };
-  }, [projects, selectedProductId, checkInLocation?.lat, checkInLocation?.lng, checkInLocation?.name]);
+  }, [projects, selectedProductId, checkInLocation]);
 
   return {
     products: projects,
-    loading,
+    loading: loading || locationLoading,
     loadError,
     selectedProductId,
     selectedProjectName: selectedProject?.name ?? '',

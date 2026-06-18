@@ -2,8 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, LocateFixed } from 'lucide-react';
 import { getBrowserLocation } from '../lib/attendanceService';
 import { getAllProjects } from '../lib/projectService';
-import { getAppSettings, getProjectLocation, saveProjectLocation } from '../lib/settingsService';
-import { getSupabaseRequestErrorMessage } from '../lib/supabase';
+import {
+  getProjectLocationFromDb,
+  saveProjectLocationToDb,
+} from '../lib/projectLocationService';
+import { getAppSettings } from '../lib/settingsService';
+import { getSupabaseConfigError, getSupabaseRequestErrorMessage } from '../lib/supabase';
 import type { ProductWithLocations } from '../types';
 
 const selectClass =
@@ -19,9 +23,10 @@ interface ProductSettingsPanelProps {
 export default function ProductSettingsPanel({ onCountChange }: ProductSettingsPanelProps) {
   const [projects, setProjects] = useState<ProductWithLocations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [locating, setLocating] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [locationLabel, setLocationLabel] = useState('');
   const [draftLocation, setDraftLocation] = useState({
@@ -30,21 +35,30 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
     radiusM: getAppSettings().officeRadiusM,
   });
 
-  const refreshLocationLabel = useCallback((projectId: string, projectName?: string) => {
+  const loadSavedLocation = useCallback(async (projectId: string, projectName?: string) => {
     if (!projectId) {
       setLocationLabel('');
       setDraftLocation({ lat: '', lng: '', radiusM: getAppSettings().officeRadiusM });
       return;
     }
-    const saved = getProjectLocation(projectId, projectName);
-    if (!saved) {
-      setLocationLabel('');
-      setDraftLocation({ lat: '', lng: '', radiusM: getAppSettings().officeRadiusM });
-      return;
-    }
 
-    setLocationLabel(`${saved.lat.toFixed(6)}, ${saved.lng.toFixed(6)}`);
-    setDraftLocation({ lat: saved.lat.toFixed(6), lng: saved.lng.toFixed(6), radiusM: saved.radiusM });
+    try {
+      const saved = await getProjectLocationFromDb(projectId, projectName);
+      if (!saved) {
+        setLocationLabel('');
+        setDraftLocation({ lat: '', lng: '', radiusM: getAppSettings().officeRadiusM });
+        return;
+      }
+
+      setLocationLabel(`${saved.lat.toFixed(6)}, ${saved.lng.toFixed(6)}`);
+      setDraftLocation({
+        lat: saved.lat.toFixed(6),
+        lng: saved.lng.toFixed(6),
+        radiusM: saved.radiusM,
+      });
+    } catch (err) {
+      setError(getSupabaseRequestErrorMessage(err, 'Không tải được vị trí đã lưu.'));
+    }
   }, []);
 
   const loadProjects = useCallback(async () => {
@@ -72,25 +86,48 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
   useEffect(() => {
-    refreshLocationLabel(selectedProjectId, selectedProject?.name);
-  }, [selectedProjectId, selectedProject?.name, refreshLocationLabel]);
+    loadSavedLocation(selectedProjectId, selectedProject?.name);
+  }, [selectedProjectId, selectedProject?.name, loadSavedLocation]);
 
-  const handleCaptureLocation = async () => {
+  const persistLocation = async (lat: number, lng: number, radiusM: number) => {
     if (!selectedProject) {
       setError('Vui lòng chọn dự án trước.');
       return;
     }
 
+    if (getSupabaseConfigError()) {
+      setError(getSupabaseConfigError());
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await saveProjectLocationToDb(selectedProject.id, { lat, lng }, radiusM);
+      const label = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setLocationLabel(label);
+      setDraftLocation({ lat: lat.toFixed(6), lng: lng.toFixed(6), radiusM });
+      setSuccess(`Đã lưu vị trí cho dự án "${selectedProject.name}" trên Supabase.`);
+    } catch (err) {
+      setError(getSupabaseRequestErrorMessage(err, 'Không lưu được vị trí. Chạy migrate-project-locations.sql trên Supabase.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCaptureLocation = async () => {
     setLocating(true);
     setError(null);
     setSuccess(null);
     try {
       const point = await getBrowserLocation();
-      saveProjectLocation(selectedProject.id, point);
-      const label = `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
-      setLocationLabel(label);
-      setDraftLocation({ lat: point.lat.toFixed(6), lng: point.lng.toFixed(6), radiusM: getAppSettings().officeRadiusM });
-      setSuccess(`Đã lưu vị trí cho dự án "${selectedProject.name}".`);
+      setDraftLocation({
+        lat: point.lat.toFixed(6),
+        lng: point.lng.toFixed(6),
+        radiusM: draftLocation.radiusM,
+      });
+      await persistLocation(point.lat, point.lng, draftLocation.radiusM);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không lấy được vị trí GPS.');
     } finally {
@@ -99,14 +136,6 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
   };
 
   const handleSaveLocation = async () => {
-    if (!selectedProject) {
-      setError('Vui lòng chọn dự án trước.');
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-
     const lat = Number(draftLocation.lat);
     const lng = Number(draftLocation.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -114,14 +143,7 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
       return;
     }
 
-    try {
-      saveProjectLocation(selectedProject.id, { lat, lng }, draftLocation.radiusM);
-      const label = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      setLocationLabel(label);
-      setSuccess(`Đã lưu tọa độ cho dự án "${selectedProject.name}".`);
-    } catch {
-      setError('Không lưu được tọa độ.');
-    }
+    await persistLocation(lat, lng, draftLocation.radiusM);
   };
 
   if (loading) {
@@ -136,12 +158,12 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[12px] text-on-surface-variant">
-        Danh sách dự án lấy từ bảng <span className="font-bold">projects</span> trên Supabase.
+        Chọn dự án và lưu vị trí chấm công. Dữ liệu lưu trên Supabase, dùng chung mọi thiết bị.
       </p>
 
       {projects.length === 0 ? (
         <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-3">
-          Chưa có dự án trong bảng projects. Thêm dự án trong hệ thống Jarviz trước khi chấm công.
+          Chưa có dự án trong bảng projects.
         </p>
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -203,12 +225,7 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-on-surface-variant">Tọa độ đã lưu</label>
-              <input
-                readOnly
-                value={locationLabel}
-                placeholder="Chưa có tọa độ"
-                className={inputClass}
-              />
+              <input readOnly value={locationLabel} placeholder="Chưa có tọa độ" className={inputClass} />
             </div>
           </div>
 
@@ -216,7 +233,7 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
             <button
               type="button"
               onClick={handleCaptureLocation}
-              disabled={locating}
+              disabled={locating || saving}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
             >
               {locating ? <Loader2 size={16} className="animate-spin" /> : <LocateFixed size={16} />}
@@ -225,15 +242,13 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
             <button
               type="button"
               onClick={handleSaveLocation}
+              disabled={saving || locating}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-white text-sm font-bold hover:bg-slate-900 disabled:opacity-60"
             >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : null}
               Lưu tọa độ
             </button>
           </div>
-
-          <p className="text-[10px] text-on-surface-variant">
-            Vị trí này dùng để so sánh khi chấm công dự án <span className="font-bold">{selectedProject.name}</span>.
-          </p>
         </div>
       )}
 

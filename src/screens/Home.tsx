@@ -30,7 +30,7 @@ import {
   saveTodayLocation,
 } from '../lib/attendanceService';
 import { formatDurationShort, getOvertimeMinutes } from '../lib/attendanceUtils';
-import { assertWithinCheckInRadius, compareWithCheckInLocation } from '../lib/settingsService';
+import { assertWithinLocation, compareWithLocation } from '../lib/settingsService';
 import { ROUTES } from '../types';
 
 const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -164,7 +164,7 @@ export default function Home() {
   }, [record?.last_lat, record?.last_lng]);
 
   const formatLocationCompare = (point: GeoPoint) => {
-    const result = compareWithCheckInLocation(point, selectedProductId, selectedProjectName);
+    const result = compareWithLocation(point, officeLocation);
     if (!result.configured || !result.office) {
       return 'Chưa cấu hình vị trí chấm công trong Cài đặt.';
     }
@@ -235,7 +235,7 @@ export default function Home() {
     runAction('check-in', async () => {
       const { location, warning } = await getLocationForAttendance();
       if (location) {
-        assertWithinCheckInRadius(location, selectedProductId, selectedProjectName);
+        assertWithinLocation(location, officeLocation);
         setLocationCompareText(formatLocationCompare(location));
       }
       const updatedRecord = await checkIn(location, productSelection);

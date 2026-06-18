@@ -19,7 +19,7 @@ import {
   getBrowserLocation,
   getTodayAttendance,
 } from '../lib/attendanceService';
-import { assertWithinCheckInRadius, compareWithCheckInLocation } from '../lib/settingsService';
+import { assertWithinLocation, compareWithLocation, type OfficeLocation } from '../lib/settingsService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage, isSupabaseConfigured } from '../lib/supabase';
 import { ROUTES, type AttendanceDbRecord, type GeoPoint } from '../types';
 
@@ -47,8 +47,8 @@ function getStatusLabel(record: AttendanceDbRecord | null) {
   return 'Đang làm việc';
 }
 
-function formatLocationCompare(point: GeoPoint, projectId: string, projectName: string) {
-  const result = compareWithCheckInLocation(point, projectId, projectName);
+function formatLocationCompare(point: GeoPoint, location: OfficeLocation | null) {
+  const result = compareWithLocation(point, location);
   if (!result.configured || !result.office) {
     return 'Chưa cấu hình vị trí chấm công trong Cài đặt.';
   }
@@ -134,10 +134,10 @@ export default function DesktopChamCong() {
       if (!location) {
         throw new Error('Không lấy được vị trí GPS. Hãy bật quyền truy cập vị trí rồi thử lại.');
       }
-      assertWithinCheckInRadius(location, selectedProductId, selectedProjectName);
+      assertWithinLocation(location, officeLocation);
       const updated = await checkIn(location, selection);
       setRecord(updated);
-      setMessage(`Chấm công thành công. ${formatLocationCompare(location, selectedProductId, selectedProjectName)}`);
+      setMessage(`Chấm công thành công. ${formatLocationCompare(location, officeLocation)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không chấm công được.');
     } finally {
@@ -157,7 +157,7 @@ export default function DesktopChamCong() {
       setRecord(updated);
       setMessage(
         location
-          ? `Check-out thành công. ${formatLocationCompare(location, selectedProductId, selectedProjectName)}`
+          ? `Check-out thành công. ${formatLocationCompare(location, officeLocation)}`
           : 'Check-out thành công.',
       );
     } catch (err) {
