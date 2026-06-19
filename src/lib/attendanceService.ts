@@ -205,6 +205,19 @@ export function getTodayKey(date = new Date()) {
 
 type BrowserLocationPermission = PermissionState | 'unknown';
 
+function isMobileBrowser() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function getBrowserName() {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'Safari';
+  if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+  if (/Chrome/i.test(ua)) return 'Chrome';
+  if (/Firefox/i.test(ua)) return 'Firefox';
+  return 'trình duyệt';
+}
+
 async function getBrowserLocationPermission(): Promise<BrowserLocationPermission> {
   if (!navigator.permissions?.query) {
     return 'unknown';
@@ -218,47 +231,133 @@ async function getBrowserLocationPermission(): Promise<BrowserLocationPermission
   }
 }
 
-function getPermissionDeniedMessage(permissionState: BrowserLocationPermission) {
-  if (permissionState === 'denied') {
-    return 'Safari đang chặn GPS cho trang này. Hãy vào Safari > Cài đặt cho trang web > Vị trí > Cho phép, rồi tải lại trang.';
-  }
-
-  return 'Safari chưa cấp quyền GPS cho trang này. Nếu đang để "Hỏi", hãy bấm Thử lại và chọn Cho phép khi Safari hỏi quyền vị trí.';
+function isIosDevice() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
+function getSafariLocationHelp() {
+  return [
+    'Bấm biểu tượng "aA" góc trái thanh địa chỉ → Cài đặt cho trang web → Vị trí → Cho phép.',
+    'Hoặc Cài đặt iPhone → Safari → Vị trí → Hỏi / Cho phép.',
+    'Bật Cài đặt → Quyền riêng tư → Dịch vụ định vị, rồi tải lại trang và bấm Thử lại.',
+  ].join(' ');
+}
+
+function getPermissionDeniedMessage(permissionState: BrowserLocationPermission) {
+  const browser = getBrowserName();
+
+  if (browser === 'Safari' || isIosDevice()) {
+    if (permissionState === 'denied') {
+      return `Safari đang chặn GPS. ${getSafariLocationHelp()}`;
+    }
+
+    return `Safari chưa cấp quyền GPS. Bấm Thử lại và chọn Cho phép khi được hỏi. Nếu không thấy hộp thoại: ${getSafariLocationHelp()}`;
+  }
+
+  if (permissionState === 'denied') {
+    return `${browser} đang chặn GPS. Vào cài đặt trang web > Vị trí > Cho phép, hoặc nhập tay lat/lng trong Cài đặt → Dự án.`;
+  }
+
+  return `Hãy bấm Cho phép khi ${browser} hỏi quyền vị trí. Nếu không thấy hộp thoại, mở https://chamcong-psi.vercel.app trực tiếp trên trình duyệt (không qua app Zalo/Facebook).`;
+}
+
+const GEO_PERMISSION_DENIED = 1;
+const GEO_POSITION_UNAVAILABLE = 2;
+const GEO_TIMEOUT = 3;
+
 function getGeolocationMessage(error: GeolocationPositionError, permissionState: BrowserLocationPermission = 'unknown') {
-  if (error.code === error.PERMISSION_DENIED) {
+  const code = error?.code;
+
+  if (code === GEO_PERMISSION_DENIED) {
     return getPermissionDeniedMessage(permissionState);
   }
 
-  if (error.code === error.POSITION_UNAVAILABLE) {
-    return 'Không xác định được GPS hiện tại. Hãy bật Dịch vụ định vị trên iPhone và cho phép Safari dùng vị trí.';
+  if (code === GEO_POSITION_UNAVAILABLE) {
+    return 'Không xác định được GPS. Bật Dịch vụ định vị trên điện thoại, ra ngoài trời hoặc nhập tay lat/lng trong Cài đặt → Dự án.';
   }
 
-  if (error.code === error.TIMEOUT) {
-    return 'Lấy vị trí GPS quá lâu. Hãy đứng nơi có tín hiệu tốt hơn rồi thử lại.';
+  if (code === GEO_TIMEOUT) {
+    return 'Lấy GPS quá lâu. Thử lại ở nơi thoáng, hoặc nhập tay tọa độ trong Cài đặt → Dự án.';
   }
 
-  return 'Không lấy được vị trí GPS. Hãy kiểm tra quyền vị trí của Safari rồi thử lại.';
+  return `Không lấy được GPS trên ${getBrowserName()}. Kiểm tra quyền vị trí hoặc nhập tay lat/lng.`;
+}
+
+function mapGeolocationPosition(position: GeolocationPosition): GeoPoint {
+  return {
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
+    capturedAt: new Date().toISOString(),
+  };
 }
 
 function requestBrowserLocation(options: PositionOptions): Promise<GeoPoint> {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: Number.isFinite(position.coords.accuracy)
-            ? position.coords.accuracy
-            : null,
-          capturedAt: new Date().toISOString(),
-        });
-      },
+      (position) => resolve(mapGeolocationPosition(position)),
       reject,
       options,
     );
   });
+}
+
+function watchBrowserLocation(options: PositionOptions, timeoutMs: number): Promise<GeoPoint> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        navigator.geolocation.clearWatch(watchId);
+        resolve(mapGeolocationPosition(position));
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        navigator.geolocation.clearWatch(watchId);
+        reject(error);
+      },
+      options,
+    );
+
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      reject({ code: GEO_TIMEOUT, message: 'GPS timeout' } as GeolocationPositionError);
+    }, timeoutMs);
+  });
+}
+
+async function tryLocationStrategies(): Promise<GeoPoint> {
+  const mobile = isMobileBrowser();
+  const attempts: Array<() => Promise<GeoPoint>> = mobile
+    ? [
+      () => requestBrowserLocation({ enableHighAccuracy: false, maximumAge: 60_000, timeout: 25_000 }),
+      () => watchBrowserLocation({ enableHighAccuracy: false, maximumAge: 60_000 }, 30_000),
+      () => requestBrowserLocation({ enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 }),
+    ]
+    : [
+      () => requestBrowserLocation({ enableHighAccuracy: true, maximumAge: 30_000, timeout: 15_000 }),
+      () => requestBrowserLocation({ enableHighAccuracy: false, maximumAge: 120_000, timeout: 20_000 }),
+    ];
+
+  let lastError: GeolocationPositionError | null = null;
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error as GeolocationPositionError;
+      if (lastError.code === GEO_PERMISSION_DENIED) {
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Không lấy được GPS.');
 }
 
 export async function getBrowserLocation(): Promise<GeoPoint> {
@@ -267,32 +366,18 @@ export async function getBrowserLocation(): Promise<GeoPoint> {
   }
 
   if (window.isSecureContext === false) {
-    throw new Error('GPS chỉ hoạt động trên trang HTTPS. Hãy mở link Vercel bằng https rồi thử lại.');
+    throw new Error(
+      'GPS chỉ hoạt động trên HTTPS. Điện thoại hãy mở https://chamcong-psi.vercel.app (không dùng http://192.168...). Hoặc nhập tay lat/lng trong Cài đặt → Dự án.',
+    );
   }
 
   const permissionState = await getBrowserLocationPermission();
 
   try {
-    return await requestBrowserLocation({
-      enableHighAccuracy: true,
-      maximumAge: 30_000,
-      timeout: 15_000,
-    });
-  } catch (firstError) {
-    const error = firstError as GeolocationPositionError;
-    if (error.code === error.PERMISSION_DENIED) {
-      throw new Error(getGeolocationMessage(error, permissionState));
-    }
-
-    try {
-      return await requestBrowserLocation({
-        enableHighAccuracy: false,
-        maximumAge: 120_000,
-        timeout: 20_000,
-      });
-    } catch (secondError) {
-      throw new Error(getGeolocationMessage(secondError as GeolocationPositionError, permissionState));
-    }
+    return await tryLocationStrategies();
+  } catch (error) {
+    const geoError = error as GeolocationPositionError;
+    throw new Error(getGeolocationMessage(geoError, permissionState));
   }
 }
 

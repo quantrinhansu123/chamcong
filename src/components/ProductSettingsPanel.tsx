@@ -249,6 +249,11 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
               Lưu tọa độ
             </button>
           </div>
+
+          <p className="text-[10px] text-on-surface-variant">
+            Không lấy được GPS trên điện thoại? Nhập tay lat/lng rồi bấm <span className="font-bold">Lưu tọa độ</span>.
+            Mở bằng <span className="font-bold">https://chamcong-psi.vercel.app</span> (không dùng IP LAN).
+          </p>
         </div>
       )}
 
