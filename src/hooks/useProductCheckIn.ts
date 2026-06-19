@@ -77,9 +77,8 @@ export function useProductCheckIn() {
     if (!project || !checkInLocation) return null;
 
     return {
-      productId: project.id,
-      productLocationId: `loc-${checkInLocation.lat}-${checkInLocation.lng}`,
-      productName: project.name,
+      projectId: project.id,
+      projectName: project.name,
       locationName: checkInLocation.name,
     };
   }, [projects, selectedProductId, checkInLocation]);

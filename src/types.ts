@@ -74,6 +74,7 @@ export interface AttendanceDbRecord {
   last_lng: number | null;
   location_accuracy_m: number | null;
   location_captured_at: string | null;
+  project_id: string | null;
   product_id: string | null;
   product_location_id: string | null;
   product_name: string | null;
@@ -84,9 +85,8 @@ export interface AttendanceDbRecord {
 }
 
 export interface CheckInProductSelection {
-  productId: string;
-  productLocationId: string;
-  productName: string;
+  projectId: string;
+  projectName: string;
   locationName: string;
 }
 

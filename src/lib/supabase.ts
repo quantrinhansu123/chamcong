@@ -31,15 +31,40 @@ export const supabase = isSupabaseConfigured
   : null;
 
 export function getSupabaseRequestErrorMessage(err: unknown, fallback: string) {
-  if (!(err instanceof Error)) return fallback;
+  const record = err && typeof err === 'object' ? (err as Record<string, unknown>) : null;
+  const message = typeof record?.message === 'string' ? record.message : '';
+  const code = typeof record?.code === 'string' ? record.code : '';
+  const details = typeof record?.details === 'string' ? record.details : '';
 
-  const message = err.message || '';
   if (message.includes('Invalid API key') || message.includes('JWT')) {
     return 'API key Supabase không hợp lệ. Kiểm tra VITE_SUPABASE_ANON_KEY trong .env.local rồi restart npm run dev.';
   }
-  if (message === 'Failed to fetch' || err.name === 'TypeError') {
+  if (message === 'Failed to fetch' || (err instanceof Error && err.name === 'TypeError')) {
     return 'Không kết nối được Supabase. Hãy kiểm tra mạng hoặc URL project.';
   }
+  if (code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) {
+    return 'Bảng attendance_records chưa có. Chạy supabase/migrate-attendance-records.sql trong Supabase SQL Editor.';
+  }
+  if (code === '42703' || message.includes('column') && message.includes('does not exist')) {
+    return 'Database thiếu cột mới. Chạy supabase/migrate-attendance-project-id.sql trên Supabase.';
+  }
+  if (code === '22P02' || message.includes('invalid input syntax for type uuid')) {
+    return 'Dữ liệu dự án không hợp lệ. Đã sửa app — tải lại trang và thử check-in lại.';
+  }
+  if (code === '23503') {
+    return 'Dữ liệu tham chiếu không hợp lệ (FK). Chạy migrate-attendance-project-id.sql trên Supabase.';
+  }
+  if (code === '42501' || message.toLowerCase().includes('permission denied')) {
+    return 'Không có quyền truy cập Supabase (RLS). Kiểm tra policy cho bảng attendance_records.';
+  }
 
-  return message || fallback;
+  if (message) {
+    return details ? `${message} (${details})` : message;
+  }
+
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
+  return fallback;
 }

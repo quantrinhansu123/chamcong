@@ -1,32 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, LocateFixed } from 'lucide-react';
+import { ChevronLeft, Loader2, LocateFixed, MapPin } from 'lucide-react';
 import { getBrowserLocation } from '../lib/attendanceService';
 import { getAllProjects } from '../lib/projectService';
 import {
+  getAllProjectLocationsFromDb,
+  getGoogleMapsUrl,
   getProjectLocationFromDb,
   saveProjectLocationToDb,
 } from '../lib/projectLocationService';
 import { getAppSettings } from '../lib/settingsService';
+import type { OfficeLocation } from '../lib/settingsService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage } from '../lib/supabase';
 import type { ProductWithLocations } from '../types';
-
-const selectClass =
-  'w-full bg-white border border-outline-variant/20 rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:outline-none';
 
 const inputClass =
   'w-full bg-surface-container-low border border-outline-variant/20 rounded-xl py-2.5 px-3 text-sm text-on-surface';
 
 interface ProductSettingsPanelProps {
   onCountChange?: (count: number) => void;
+  onSaved?: (message: string) => void;
 }
 
-export default function ProductSettingsPanel({ onCountChange }: ProductSettingsPanelProps) {
+type PanelView = 'list' | 'edit';
+
+export default function ProductSettingsPanel({ onCountChange, onSaved }: ProductSettingsPanelProps) {
   const [projects, setProjects] = useState<ProductWithLocations[]>([]);
+  const [locations, setLocations] = useState<Record<string, OfficeLocation>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [view, setView] = useState<PanelView>('list');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [locationLabel, setLocationLabel] = useState('');
   const [draftLocation, setDraftLocation] = useState({
@@ -35,10 +40,45 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
     radiusM: getAppSettings().officeRadiusM,
   });
 
+  const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [rows, locationMap] = await Promise.all([
+        getAllProjects(),
+        getAllProjectLocationsFromDb(),
+      ]);
+      setProjects(rows);
+      setLocations(locationMap);
+      onCountChange?.(rows.length);
+    } catch (err) {
+      setError(getSupabaseRequestErrorMessage(err, 'Không tải được danh sách dự án.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [onCountChange]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
   const loadSavedLocation = useCallback(async (projectId: string, projectName?: string) => {
     if (!projectId) {
       setLocationLabel('');
       setDraftLocation({ lat: '', lng: '', radiusM: getAppSettings().officeRadiusM });
+      return;
+    }
+
+    const cached = locations[projectId];
+    if (cached) {
+      setLocationLabel(`${cached.lat.toFixed(6)}, ${cached.lng.toFixed(6)}`);
+      setDraftLocation({
+        lat: cached.lat.toFixed(6),
+        lng: cached.lng.toFixed(6),
+        radiusM: cached.radiusM,
+      });
       return;
     }
 
@@ -59,45 +99,47 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
     } catch (err) {
       setError(getSupabaseRequestErrorMessage(err, 'Không tải được vị trí đã lưu.'));
     }
-  }, []);
+  }, [locations]);
 
-  const loadProjects = useCallback(async () => {
-    setLoading(true);
+  const openEditView = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setView('edit');
+    setSuccess(null);
     setError(null);
-    try {
-      const rows = await getAllProjects();
-      setProjects(rows);
-      onCountChange?.(rows.length);
-      setSelectedProjectId((current) => {
-        if (current && rows.some((p) => p.id === current)) return current;
-        return rows[0]?.id ?? '';
-      });
-    } catch (err) {
-      setError(getSupabaseRequestErrorMessage(err, 'Không tải được danh sách dự án.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [onCountChange]);
+  };
+
+  const backToList = () => {
+    setView('list');
+    setSelectedProjectId('');
+    setSuccess(null);
+    setError(null);
+  };
 
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
-
-  const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
-
-  useEffect(() => {
+    if (view !== 'edit' || !selectedProjectId) return;
     loadSavedLocation(selectedProjectId, selectedProject?.name);
-  }, [selectedProjectId, selectedProject?.name, loadSavedLocation]);
+  }, [view, selectedProjectId, selectedProject?.name, loadSavedLocation]);
 
-  const persistLocation = async (lat: number, lng: number, radiusM: number) => {
+  const openGoogleMaps = (project: ProductWithLocations) => {
+    const location = locations[project.id];
+    if (!location) {
+      setError(`Dự án "${project.name}" chưa có tọa độ. Bấm vào tên dự án để cấu hình.`);
+      return;
+    }
+
+    setError(null);
+    window.open(getGoogleMapsUrl(location.lat, location.lng), '_blank', 'noopener,noreferrer');
+  };
+
+  const persistLocation = async (lat: number, lng: number, radiusM: number): Promise<string | null> => {
     if (!selectedProject) {
       setError('Vui lòng chọn dự án trước.');
-      return;
+      return null;
     }
 
     if (getSupabaseConfigError()) {
       setError(getSupabaseConfigError());
-      return;
+      return null;
     }
 
     setSaving(true);
@@ -105,12 +147,20 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
     setSuccess(null);
     try {
       await saveProjectLocationToDb(selectedProject.id, { lat, lng }, radiusM);
+      const saved: OfficeLocation = {
+        name: selectedProject.name,
+        lat,
+        lng,
+        radiusM,
+      };
+      setLocations((current) => ({ ...current, [selectedProject.id]: saved }));
       const label = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       setLocationLabel(label);
       setDraftLocation({ lat: lat.toFixed(6), lng: lng.toFixed(6), radiusM });
-      setSuccess(`Đã lưu vị trí cho dự án "${selectedProject.name}" trên Supabase.`);
+      return `Đã lưu vị trí cho dự án "${selectedProject.name}".`;
     } catch (err) {
       setError(getSupabaseRequestErrorMessage(err, 'Không lưu được vị trí. Chạy migrate-project-locations.sql trên Supabase.'));
+      return null;
     } finally {
       setSaving(false);
     }
@@ -127,7 +177,8 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
         lng: point.lng.toFixed(6),
         radiusM: draftLocation.radiusM,
       });
-      await persistLocation(point.lat, point.lng, draftLocation.radiusM);
+      const message = await persistLocation(point.lat, point.lng, draftLocation.radiusM);
+      if (message) setSuccess(message);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không lấy được vị trí GPS.');
     } finally {
@@ -143,7 +194,12 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
       return;
     }
 
-    await persistLocation(lat, lng, draftLocation.radiusM);
+    const message = await persistLocation(lat, lng, draftLocation.radiusM);
+    if (message && onSaved) {
+      onSaved(message);
+    } else if (message) {
+      setSuccess(message);
+    }
   };
 
   if (loading) {
@@ -155,40 +211,20 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
     );
   }
 
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-[12px] text-on-surface-variant">
-        Chọn dự án và lưu vị trí chấm công. Dữ liệu lưu trên Supabase, dùng chung mọi thiết bị.
-      </p>
+  if (view === 'edit' && selectedProject) {
+    return (
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={backToList}
+          className="flex items-center gap-1.5 text-sm font-bold text-emerald-700 w-fit"
+        >
+          <ChevronLeft size={18} />
+          Danh sách dự án
+        </button>
 
-      {projects.length === 0 ? (
-        <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-3">
-          Chưa có dự án trong bảng projects.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[12px] font-bold text-on-surface-variant">Dự án</label>
-          <select
-            value={selectedProjectId}
-            onChange={(e) => {
-              setSelectedProjectId(e.target.value);
-              setSuccess(null);
-              setError(null);
-            }}
-            className={selectClass}
-          >
-            <option value="">— Chọn dự án —</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {selectedProject && (
         <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 px-3 py-3 space-y-4">
+          <p className="text-sm font-bold text-on-surface">{selectedProject.name}</p>
           <p className="text-[11px] font-bold text-on-surface-variant uppercase">Vị trí chấm công</p>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -249,18 +285,67 @@ export default function ProductSettingsPanel({ onCountChange }: ProductSettingsP
               Lưu tọa độ
             </button>
           </div>
-
-          <p className="text-[10px] text-on-surface-variant">
-            Không lấy được GPS trên điện thoại? Nhập tay lat/lng rồi bấm <span className="font-bold">Lưu tọa độ</span>.
-            Mở bằng <span className="font-bold">https://chamcong-psi.vercel.app</span> (không dùng IP LAN).
-          </p>
         </div>
-      )}
 
-      {success && (
-        <p className="text-[12px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-          {success}
+        {success && (
+          <p className="text-[12px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+            {success}
+          </p>
+        )}
+
+        {error && (
+          <p className="text-[12px] font-medium text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[12px] text-on-surface-variant">
+        Danh sách dự án. Bấm nút vị trí để mở Google Maps, bấm tên dự án để cấu hình tọa độ.
+      </p>
+
+      {projects.length === 0 ? (
+        <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-3">
+          Chưa có dự án trong bảng projects.
         </p>
+      ) : (
+        <div className="flex flex-col divide-y divide-outline-variant/10 rounded-xl border border-outline-variant/15 overflow-hidden">
+          {projects.map((project) => {
+            const location = locations[project.id];
+            return (
+              <div
+                key={project.id}
+                className="flex items-center gap-3 px-3 py-3 bg-white hover:bg-surface-container-low/60 transition-colors"
+              >
+                <button
+                  type="button"
+                  onClick={() => openEditView(project.id)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <p className="text-sm font-bold text-on-surface truncate">{project.name}</p>
+                  <p className="text-[11px] text-on-surface-variant mt-0.5 truncate">
+                    {location
+                      ? `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)} · ${location.radiusM}m`
+                      : 'Chưa có vị trí'}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openGoogleMaps(project)}
+                  disabled={!location}
+                  title={location ? 'Mở Google Maps' : 'Chưa có tọa độ'}
+                  className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <MapPin size={18} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {error && (

@@ -40,6 +40,7 @@ export default function Settings() {
   const [formError, setFormError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
+  const [productSuccessMessage, setProductSuccessMessage] = useState<string | null>(null);
 
   const refreshSettings = useCallback(() => {
     const next = getAppSettings();
@@ -57,6 +58,18 @@ export default function Settings() {
       .then((rows) => setProductCount(rows.length))
       .catch(() => setProductCount(0));
   }, [activePanel]);
+
+  useEffect(() => {
+    if (!productSuccessMessage) return;
+    const timer = window.setTimeout(() => setProductSuccessMessage(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [productSuccessMessage]);
+
+  const handleProjectLocationSaved = (message: string) => {
+    setActivePanel(null);
+    setFormError(null);
+    setProductSuccessMessage(message);
+  };
 
   const openPanel = (panel: SettingsPanel) => {
     setDraft(getAppSettings());
@@ -284,6 +297,12 @@ export default function Settings() {
         ))}
       </div>
 
+      {productSuccessMessage && (
+        <p className="text-[12px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3">
+          {productSuccessMessage}
+        </p>
+      )}
+
       <button
         type="button"
         onClick={handleLogout}
@@ -360,7 +379,10 @@ export default function Settings() {
                 )}
 
                 {activePanel === 'products' && (
-                  <ProductSettingsPanel onCountChange={setProductCount} />
+                  <ProductSettingsPanel
+                    onCountChange={setProductCount}
+                    onSaved={handleProjectLocationSaved}
+                  />
                 )}
 
                 {activePanel === 'location' && (

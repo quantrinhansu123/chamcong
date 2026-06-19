@@ -451,7 +451,7 @@ export async function checkIn(
     throw new Error('Vui lòng nhập mã nhân viên trước khi chấm công.');
   }
 
-  if (!product.productId) {
+  if (!product.projectId) {
     throw new Error('Vui lòng chọn dự án trước khi check-in.');
   }
 
@@ -464,9 +464,10 @@ export async function checkIn(
         employee_name: currentEmployee.name,
         work_date: getTodayKey(),
         ...getShiftConfig(),
-        product_id: product.productId,
-        product_location_id: product.productLocationId,
-        product_name: product.productName,
+        product_id: null,
+        product_location_id: null,
+        project_id: product.projectId,
+        product_name: product.projectName,
         location_name: product.locationName,
         check_in_at: now,
         check_in_lat: location?.lat ?? null,

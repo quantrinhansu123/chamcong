@@ -212,7 +212,7 @@ export default function Home() {
               : 'Đã lưu GPS vào Supabase.'),
       );
     } catch (err) {
-      const errorMessage = getErrorMessage(err, 'Có lỗi khi lưu dữ liệu.');
+      const errorMessage = getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'Có lỗi khi lưu dữ liệu.'));
       setError(errorMessage);
       if (action === 'location') {
         setLocationError(errorMessage);

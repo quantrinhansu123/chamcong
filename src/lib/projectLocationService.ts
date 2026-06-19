@@ -23,6 +23,26 @@ export function notifyProjectLocationUpdated(projectId: string) {
   window.dispatchEvent(new CustomEvent(PROJECT_LOCATION_UPDATED_EVENT, { detail: { projectId } }));
 }
 
+export async function getAllProjectLocationsFromDb(): Promise<Record<string, OfficeLocation>> {
+  if (!supabase) return {};
+
+  const { data, error } = await supabase
+    .from('project_checkin_locations')
+    .select('project_id, lat, lng, radius_m');
+
+  if (error) throw error;
+
+  const result: Record<string, OfficeLocation> = {};
+  for (const row of (data ?? []) as ProjectLocationRow[]) {
+    result[row.project_id] = mapRow(row);
+  }
+  return result;
+}
+
+export function getGoogleMapsUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
 export async function getProjectLocationFromDb(
   projectId: string,
   projectName?: string,
