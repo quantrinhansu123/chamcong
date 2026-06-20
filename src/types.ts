@@ -3,6 +3,7 @@ export type Screen = 'home' | 'history' | 'reports' | 'settings';
 export const ROUTES = {
   home: '/',
   reports: '/bao-cao',
+  attendanceSheet: '/bang-cong',
   settings: '/cai-dat',
   history: '/lich-su',
   desktopChamCong: '/desktop/cham-cong',

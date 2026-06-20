@@ -80,7 +80,9 @@ export default function DesktopChamCong() {
     selection,
     canCheckIn,
     loadError: projectsLoadError,
-  } = useProductCheckIn();
+    checkedOutToday,
+    refreshProjects,
+  } = useProductCheckIn(employee);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -137,6 +139,7 @@ export default function DesktopChamCong() {
       assertWithinLocation(location, officeLocation);
       const updated = await checkIn(location, selection);
       setRecord(updated);
+      refreshProjects();
       setMessage(`Chấm công thành công. ${formatLocationCompare(location, officeLocation)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không chấm công được.');
@@ -155,6 +158,7 @@ export default function DesktopChamCong() {
       const location = await getLocation();
       const updated = await checkOut(record, location);
       setRecord(updated);
+      refreshProjects();
       setMessage(
         location
           ? `Check-out thành công. ${formatLocationCompare(location, officeLocation)}`
@@ -195,7 +199,7 @@ export default function DesktopChamCong() {
             <h2 className="font-bold">Chọn dự án</h2>
           </div>
 
-          {!record?.check_in_at ? (
+          {!record?.check_in_at && !checkedOutToday ? (
             <div className="space-y-2">
               <ProductCheckInPicker
                 products={products}
@@ -219,10 +223,14 @@ export default function DesktopChamCong() {
                 </p>
               )}
             </div>
+          ) : checkedOutToday ? (
+            <p className="text-sm text-on-surface-variant bg-surface-container-low rounded-xl px-4 py-3">
+              Bạn đã check-out hôm nay. Không còn trong danh sách đang làm việc.
+            </p>
           ) : (
             <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
-              <p className="text-sm font-bold text-emerald-800">{record.product_name || '—'}</p>
-              <p className="text-xs text-emerald-700 mt-0.5">{record.location_name || '—'}</p>
+              <p className="text-sm font-bold text-emerald-800">{record?.product_name || '—'}</p>
+              <p className="text-xs text-emerald-700 mt-0.5">{record?.location_name || '—'}</p>
             </div>
           )}
 

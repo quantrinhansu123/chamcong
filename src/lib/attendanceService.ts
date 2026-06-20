@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { AttendanceDbRecord, CheckInProductSelection, GeoPoint } from '../types';
 import { getShiftConfig } from './settingsService';
-import { getAllStaff, type StaffRecord } from './staffService';
+import { getAllStaff, isValidQueryUserId, resolveQueryUserId, resolveStaffIdentity, type StaffRecord } from './staffService';
 
 const EMPLOYEE_ID = (import.meta.env.VITE_EMPLOYEE_ID as string | undefined) || '';
 const EMPLOYEE_NAME = (import.meta.env.VITE_EMPLOYEE_NAME as string | undefined) || '';
@@ -80,6 +80,20 @@ export function syncEmployeeFromUrl(search = window.location.search): EmployeeId
   return parsed;
 }
 
+export async function syncEmployeeFromUrlWithStaff(
+  search = window.location.search,
+): Promise<EmployeeIdentity | null> {
+  const parsed = parseEmployeeFromUrl(search);
+  if (!parsed) return null;
+
+  const resolved = await resolveStaffIdentity(parsed);
+  currentEmployee.id = resolved.id;
+  currentEmployee.name = resolved.name;
+  currentEmployee.phone = resolved.phone;
+  localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify(resolved));
+  return resolved;
+}
+
 function getEmployeeFromUrl(): EmployeeIdentity | null {
   return parseEmployeeFromUrl(window.location.search);
 }
@@ -143,6 +157,40 @@ export function hasCurrentEmployee() {
   return Boolean(currentEmployee.id && currentEmployee.name);
 }
 
+export async function ensureCurrentEmployeeResolved(): Promise<EmployeeIdentity | null> {
+  if (!hasCurrentEmployee()) return null;
+
+  if (isValidQueryUserId(currentEmployee.id)) {
+    return currentEmployee;
+  }
+
+  const resolved = await resolveStaffIdentity(currentEmployee).catch(() => currentEmployee);
+  if (isValidQueryUserId(resolved.id)) {
+    currentEmployee.id = resolved.id;
+    currentEmployee.name = resolved.name;
+    currentEmployee.phone = resolved.phone;
+    localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify({
+      id: resolved.id,
+      name: resolved.name,
+      phone: resolved.phone,
+    }));
+    return currentEmployee;
+  }
+
+  const resolvedId = await resolveQueryUserId(resolved).catch(() => null);
+  if (!resolvedId) return null;
+
+  currentEmployee.id = resolvedId;
+  currentEmployee.name = resolved.name;
+  currentEmployee.phone = resolved.phone;
+  localStorage.setItem(EMPLOYEE_STORAGE_KEY, JSON.stringify({
+    id: resolvedId,
+    name: resolved.name,
+    phone: resolved.phone,
+  }));
+  return currentEmployee;
+}
+
 export function setCurrentEmployee(employee: EmployeeIdentity) {
   const nextEmployee = {
     id: employee.id.trim(),
@@ -180,6 +228,15 @@ export async function getTodayAttendanceForAll() {
 
   if (error) throw error;
   return data as AttendanceDbRecord[];
+}
+
+export function isActiveAttendanceRecord(record: AttendanceDbRecord) {
+  return Boolean(record.check_in_at) && !record.check_out_at;
+}
+
+export async function getTodayActiveAttendanceForAll() {
+  const records = await getTodayAttendanceForAll();
+  return records.filter(isActiveAttendanceRecord);
 }
 
 export async function saveEmployeeToSupabase() {
@@ -386,14 +443,15 @@ export async function getTodayAttendance() {
     throw new Error('Chưa cấu hình Supabase.');
   }
 
-  if (!hasCurrentEmployee()) {
+  const employee = await ensureCurrentEmployeeResolved();
+  if (!employee) {
     throw new Error('Vui lòng nhập mã nhân viên trước khi chấm công.');
   }
 
   const { data, error } = await supabase
     .from('attendance_records')
     .select('*')
-    .eq('employee_id', currentEmployee.id)
+    .eq('employee_id', employee.id)
     .eq('work_date', getTodayKey())
     .maybeSingle();
 
@@ -447,8 +505,9 @@ export async function checkIn(
     throw new Error('Chưa cấu hình Supabase.');
   }
 
-  if (!hasCurrentEmployee()) {
-    throw new Error('Vui lòng nhập mã nhân viên trước khi chấm công.');
+  const employee = await ensureCurrentEmployeeResolved();
+  if (!employee) {
+    throw new Error('Không xác định được nhân viên. Mở link với ?name=...');
   }
 
   if (!product.projectId) {
@@ -460,8 +519,8 @@ export async function checkIn(
     .from('attendance_records')
     .upsert(
       {
-        employee_id: currentEmployee.id,
-        employee_name: currentEmployee.name,
+        employee_id: employee.id,
+        employee_name: employee.name,
         work_date: getTodayKey(),
         ...getShiftConfig(),
         product_id: null,
@@ -538,8 +597,9 @@ export async function saveTodayLocation(location: GeoPoint) {
     throw new Error('Chưa cấu hình Supabase.');
   }
 
-  if (!hasCurrentEmployee()) {
-    throw new Error('Vui lòng nhập mã nhân viên trước khi lưu GPS.');
+  const employee = await ensureCurrentEmployeeResolved();
+  if (!employee) {
+    throw new Error('Không xác định được nhân viên. Mở link với ?name=...');
   }
 
   const existing = await getTodayAttendance();
@@ -550,8 +610,8 @@ export async function saveTodayLocation(location: GeoPoint) {
   const { data, error } = await supabase
     .from('attendance_records')
     .insert({
-      employee_id: currentEmployee.id,
-      employee_name: currentEmployee.name,
+      employee_id: employee.id,
+      employee_name: employee.name,
       work_date: getTodayKey(),
       ...getShiftConfig(),
       last_lat: location.lat,

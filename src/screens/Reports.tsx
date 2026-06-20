@@ -14,8 +14,10 @@ import {
   AlertTriangle,
   XCircle,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import type { AttendanceDbRecord } from '../types';
+import { ROUTES } from '../types';
 import { useEmployee } from '../context/EmployeeContext';
 import { getAllEmployees, getAttendanceRecordsInRange, type EmployeeRecord } from '../lib/attendanceService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage } from '../lib/supabase';
@@ -229,7 +231,15 @@ export default function Reports() {
       </div>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-bold text-primary tracking-tight">Báo cáo</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-primary tracking-tight">Báo cáo</h2>
+          <Link
+            to={ROUTES.attendanceSheet}
+            className="rounded-xl bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white hover:bg-emerald-700"
+          >
+            Bảng chấm công
+          </Link>
+        </div>
         <div className="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl border border-outline-variant/20">
           <button
             onClick={() => setPeriod('current')}

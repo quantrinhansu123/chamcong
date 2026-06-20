@@ -11,6 +11,7 @@ interface ProductCheckInPickerProps {
   selectedProductId: string;
   onProductChange: (productId: string) => void;
   compact?: boolean;
+  emptyMessage?: string;
 }
 
 export default function ProductCheckInPicker({
@@ -20,6 +21,7 @@ export default function ProductCheckInPicker({
   selectedProductId,
   onProductChange,
   compact = false,
+  emptyMessage = 'Chưa có dự án được gán cho bạn trong bảng work_sessions.',
 }: ProductCheckInPickerProps) {
   if (loading) {
     return (
@@ -41,7 +43,7 @@ export default function ProductCheckInPicker({
   if (products.length === 0) {
     return (
       <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-        Chưa có dự án trong bảng projects. Thêm dự án trong hệ thống Jarviz trước.
+        {emptyMessage}
       </p>
     );
   }

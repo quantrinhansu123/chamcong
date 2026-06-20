@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Calendar,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Loader2,
   LogIn,
   LogOut,
@@ -23,18 +21,16 @@ import { useEmployee } from '../context/EmployeeContext';
 import {
   checkIn,
   checkOut,
-  getAllEmployees,
   getBrowserLocation,
   getTodayAttendance,
-  getTodayAttendanceForAll,
   saveTodayLocation,
 } from '../lib/attendanceService';
-import { formatDurationShort, getOvertimeMinutes } from '../lib/attendanceUtils';
+import { getTodayOverviewForProjects } from '../lib/overviewService';
+import { isAnonymousUserId, isValidQueryUserId, resolveQueryUserId } from '../lib/staffService';
 import { assertWithinLocation, compareWithLocation } from '../lib/settingsService';
 import { ROUTES } from '../types';
 
 const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
 function formatTime(value?: string | null) {
   if (!value) return '--:--';
@@ -47,16 +43,6 @@ function formatTime(value?: string | null) {
 
 function formatDate(date = new Date()) {
   return `${dayNames[date.getDay()]}, ${new Intl.DateTimeFormat('vi-VN').format(date)}`;
-}
-
-function formatDuration(start?: string | null, end?: string | null, now = new Date()) {
-  if (!start) return '0h 00m';
-  const startMs = new Date(start).getTime();
-  const endMs = end ? new Date(end).getTime() : now.getTime();
-  const diffMinutes = Math.max(0, Math.floor((endMs - startMs) / 60_000));
-  const hours = Math.floor(diffMinutes / 60);
-  const minutes = `${diffMinutes % 60}`.padStart(2, '0');
-  return `${hours}h ${minutes}m`;
 }
 
 function getStatusLabel(record: AttendanceDbRecord | null) {
@@ -77,6 +63,7 @@ function getErrorMessage(err: unknown, fallback: string) {
 
 export default function Home() {
   const employee = useEmployee();
+  const employeeResolving = Boolean(employee.resolving);
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -90,6 +77,8 @@ export default function Home() {
     checkedIn: 0,
     notCheckedIn: 0,
     absent: 0,
+    projectNames: [] as string[],
+    projectCount: 0,
     loading: true,
   });
   const {
@@ -102,7 +91,9 @@ export default function Home() {
     selection: productSelection,
     canCheckIn,
     loadError: projectsLoadError,
-  } = useProductCheckIn();
+    checkedOutToday,
+    refreshProjects,
+  } = useProductCheckIn(employee);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -123,45 +114,136 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
+  const loadOverview = useCallback(async () => {
     if (getSupabaseConfigError()) {
       setOverview((prev) => ({ ...prev, loading: false }));
       return;
     }
 
-    Promise.all([getAllEmployees(), getTodayAttendanceForAll()])
-      .then(([employees, todayRecords]) => {
-        const activeEmployees = employees.filter((emp) => !emp.status || emp.status === 'active');
-        const checkedInIds = new Set(
-          todayRecords.filter((row) => row.check_in_at).map((row) => row.employee_id),
-        );
-        const absent = todayRecords.filter((row) => !row.check_in_at).length;
+    if (employeeResolving) {
+      return;
+    }
 
+    const userId = employee?.id?.trim() ?? '';
+    const userName = employee?.name?.trim() ?? '';
+    if (!userId && !userName) {
+      setOverview({
+        total: 0,
+        checkedIn: 0,
+        notCheckedIn: 0,
+        absent: 0,
+        projectNames: [],
+        projectCount: 0,
+        loading: false,
+      });
+      return;
+    }
+
+    if (isAnonymousUserId(userId) && !userName) {
+      setOverview({
+        total: 0,
+        checkedIn: 0,
+        notCheckedIn: 0,
+        absent: 0,
+        projectNames: [],
+        projectCount: 0,
+        loading: false,
+      });
+      return;
+    }
+
+    setOverview((prev) => ({ ...prev, loading: true }));
+    try {
+      const resolvedId = isValidQueryUserId(userId)
+        ? userId
+        : await resolveQueryUserId({ id: userId, name: userName });
+
+      if (!resolvedId) {
         setOverview({
-          total: activeEmployees.length,
-          checkedIn: checkedInIds.size,
-          notCheckedIn: Math.max(0, activeEmployees.length - checkedInIds.size),
-          absent,
+          total: 0,
+          checkedIn: 0,
+          notCheckedIn: 0,
+          absent: 0,
+          projectNames: [],
+        projectCount: 0,
           loading: false,
         });
-      })
-      .catch(() => setOverview((prev) => ({ ...prev, loading: false })));
-  }, []);
+        return;
+      }
 
-  const duration = useMemo(
-    () => formatDuration(record?.check_in_at, record?.check_out_at, now),
-    [record?.check_in_at, record?.check_out_at, now],
-  );
+      const data = await getTodayOverviewForProjects(resolvedId, userName);
+      setOverview({
+        total: data.total ?? 0,
+        checkedIn: data.checkedIn ?? 0,
+        notCheckedIn: data.notCheckedIn ?? 0,
+        absent: data.absent ?? 0,
+        projectNames: data.projectNames ?? [],
+        projectCount: data.projectCount ?? 0,
+        loading: false,
+      });
+    } catch {
+      setOverview({
+        total: 0,
+        checkedIn: 0,
+        notCheckedIn: 0,
+        absent: 0,
+        projectNames: [],
+        projectCount: 0,
+        loading: false,
+      });
+    }
+  }, [employee?.id, employee?.name, employeeResolving]);
 
-  const overtimeMinutes = useMemo(() => {
-    if (!record) return 0;
-    return getOvertimeMinutes(record, now);
-  }, [record, now]);
+  useEffect(() => {
+    loadOverview();
+  }, [loadOverview]);
+
+  const isActiveCheckIn = Boolean(record?.check_in_at && !record?.check_out_at);
+
+  const activeSiteName = useMemo(() => {
+    if (!isActiveCheckIn) return null;
+    return record?.product_name?.trim() || selectedProjectName || null;
+  }, [isActiveCheckIn, record?.product_name, selectedProjectName]);
 
   const locationText = useMemo(() => {
+    if (isActiveCheckIn && activeSiteName) return activeSiteName;
     if (!record?.last_lat || !record?.last_lng) return 'Chưa ghi nhận GPS';
     return `${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`;
-  }, [record?.last_lat, record?.last_lng]);
+  }, [isActiveCheckIn, activeSiteName, record?.last_lat, record?.last_lng]);
+
+  const locationSubtext = useMemo(() => {
+    if (locationError) return null;
+
+    if (isActiveCheckIn && activeSiteName) {
+      const parts: string[] = [];
+      if (record?.location_name) parts.push(record.location_name);
+      if (record?.last_lat && record?.last_lng) {
+        parts.push(`${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`);
+      } else if (!record?.location_name) {
+        parts.push('Chưa ghi nhận GPS — bấm để cập nhật');
+      }
+      if (record?.check_in_at) {
+        parts.push(`Check-in ${formatTime(record.check_in_at)}`);
+      }
+      return parts.join(' · ');
+    }
+
+    if (locationCompareText) return locationCompareText;
+    if (officeLocation) {
+      return `So sánh với ${officeLocation.name} (bán kính ${officeLocation.radiusM}m)`;
+    }
+    return 'Cấu hình vị trí trong Cài đặt trước khi chấm công';
+  }, [
+    isActiveCheckIn,
+    activeSiteName,
+    locationError,
+    locationCompareText,
+    officeLocation,
+    record?.location_name,
+    record?.last_lat,
+    record?.last_lng,
+    record?.check_in_at,
+  ]);
 
   const formatLocationCompare = (point: GeoPoint) => {
     const result = compareWithLocation(point, officeLocation);
@@ -239,6 +321,8 @@ export default function Home() {
         setLocationCompareText(formatLocationCompare(location));
       }
       const updatedRecord = await checkIn(location, productSelection);
+      refreshProjects();
+      loadOverview();
       return {
         record: updatedRecord,
         locationError: warning,
@@ -256,6 +340,8 @@ export default function Home() {
     runAction('check-out', async () => {
       const { location, warning } = await getLocationForAttendance();
       const updatedRecord = await checkOut(record, location);
+      refreshProjects();
+      loadOverview();
       return {
         record: updatedRecord,
         locationError: warning,
@@ -288,7 +374,6 @@ export default function Home() {
     || !isSupabaseConfigured
     || !canCheckIn;
   const checkOutDisabled = loading || Boolean(busyAction) || !record?.check_in_at || Boolean(record?.check_out_at) || !isSupabaseConfigured;
-  const currentDay = now.getDate();
 
   return (
     <motion.div
@@ -333,7 +418,13 @@ export default function Home() {
           )}
         </div>
 
-        {!record?.check_in_at && (
+        {checkedOutToday && (
+          <p className="text-[11px] font-medium text-on-surface-variant bg-surface-container-low rounded-xl px-3 py-2">
+            Bạn đã check-out hôm nay. Không còn trong danh sách đang làm việc.
+          </p>
+        )}
+
+        {!record?.check_in_at && !checkedOutToday && (
           <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-3 space-y-2">
             <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Dự án chấm công</p>
             <ProductCheckInPicker
@@ -415,18 +506,22 @@ export default function Home() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start">
-            <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">VỊ TRÍ HIỆN TẠI</p>
-            <span className="px-2 py-0.5 rounded-full bg-surface-container-low border border-outline-variant/30 text-[10px] font-bold text-outline uppercase tracking-wider">GPS</span>
+            <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">
+              {isActiveCheckIn ? 'CÔNG TRÌNH ĐANG LÀM' : 'VỊ TRÍ HIỆN TẠI'}
+            </p>
+            <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${
+              isActiveCheckIn
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-surface-container-low border-outline-variant/30 text-outline'
+            }`}>
+              {isActiveCheckIn ? 'Đang làm' : 'GPS'}
+            </span>
           </div>
           <h3 className={`font-bold text-lg leading-tight mb-1 ${locationError ? 'text-red-700' : 'text-on-surface truncate'}`}>
             {locationError ? 'Chưa lấy được GPS' : locationText}
           </h3>
           <p className={`text-[12px] leading-relaxed ${locationError ? 'text-red-700' : 'text-on-surface-variant'}`}>
-            {locationError
-              || locationCompareText
-              || (officeLocation
-                ? `So sánh với ${officeLocation.name} (bán kính ${officeLocation.radiusM}m)`
-                : 'Cấu hình vị trí trong Cài đặt trước khi chấm công')}
+            {locationError || locationSubtext}
           </p>
           {!locationError && record?.location_accuracy_m && (
             <p className="text-[11px] text-on-surface-variant mt-1">
@@ -439,48 +534,18 @@ export default function Home() {
         </div>
       </button>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="glass-card p-5 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-on-surface-variant">
-            <Calendar size={18} />
-            <h3 className="text-sm font-bold text-on-surface">Lịch làm việc</h3>
-          </div>
-          <p className="text-[12px] font-bold text-on-surface">{new Intl.DateTimeFormat('vi-VN').format(now)}</p>
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-outline-variant/50">
-            {weekDays.map((day, index) => (
-              <div key={day} className={index < 5 ? 'text-outline-variant' : ''}>{day}</div>
-            ))}
-            {Array.from({ length: 7 }).map((_, index) => (
-              <div
-                key={index}
-                className={`h-6 flex items-center justify-center ${index === Math.min(6, currentDay % 7) ? 'bg-primary text-white rounded-full' : 'text-outline'}`}
-              >
-                {currentDay - Math.min(6, currentDay % 7) + index}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-on-surface-variant">
-            <Clock size={18} />
-            <h3 className="text-sm font-bold text-on-surface">Tổng thời gian</h3>
-          </div>
-          <div className="flex flex-col items-center justify-center py-2">
-            <div className="text-[32px] font-bold text-on-surface leading-tight">{duration}</div>
-            <p className="text-[12px] font-semibold text-outline">Hôm nay</p>
-            {overtimeMinutes > 0 && (
-              <p className="text-[11px] font-bold text-violet-600 mt-1">
-                OT +{formatDurationShort(overtimeMinutes)}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
       <div className="glass-card p-5 flex flex-col gap-4 mb-4">
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-on-surface">Tổng quan hôm nay</h3>
+          <div>
+            <h3 className="text-sm font-bold text-on-surface">Tổng quan hôm nay</h3>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">
+              {overview.loading || employeeResolving
+                ? 'Đang tải dự án...'
+                : (overview.projectNames ?? []).length > 0
+                  ? (overview.projectNames ?? []).join(', ')
+                  : 'Chưa có dự án được gán'}
+            </p>
+          </div>
           <Link to="/bao-cao" className="text-[12px] font-bold text-on-surface flex items-center gap-1 hover:opacity-80 transition-opacity">
             Xem báo cáo <ChevronRight size={14} />
           </Link>
@@ -499,8 +564,8 @@ export default function Home() {
                 strokeWidth="12"
                 strokeDasharray="251.2"
                 strokeDashoffset={
-                  overview.total > 0
-                    ? 251.2 * (1 - overview.checkedIn / overview.total)
+                  overview.projectCount > 0
+                    ? 251.2 * (1 - overview.checkedIn / Math.max(overview.total, 1))
                     : 251.2
                 }
                 strokeLinecap="round"
@@ -508,9 +573,9 @@ export default function Home() {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-lg font-bold text-on-surface">
-                {overview.loading ? '—' : overview.total}
+                {overview.loading ? '—' : overview.projectCount}
               </span>
-              <span className="text-[10px] font-bold text-outline uppercase">Nhân sự</span>
+              <span className="text-[10px] font-bold text-outline uppercase">Dự án</span>
             </div>
           </div>
 
