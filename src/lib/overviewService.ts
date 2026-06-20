@@ -1,8 +1,21 @@
 import { getAllEmployees, getTodayAttendanceForAll } from './attendanceService';
+import type { AttendanceDbRecord } from '../types';
 import {
   getProjectsForUser,
   getTeamUserIdsForProjects,
 } from './projectService';
+
+export type TodaySiteVisit = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  locationName: string | null;
+  employeeId: string;
+  employeeName: string;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  status: 'working' | 'checked_out';
+};
 
 export type TodayOverview = {
   total: number;
@@ -11,7 +24,39 @@ export type TodayOverview = {
   absent: number;
   projectNames: string[];
   projectCount: number;
+  siteVisits: TodaySiteVisit[];
 };
+
+function mapSiteVisit(record: AttendanceDbRecord): TodaySiteVisit | null {
+  if (!record.check_in_at || !record.project_id) return null;
+
+  return {
+    id: record.id,
+    projectId: String(record.project_id),
+    projectName: record.product_name?.trim() || String(record.project_id),
+    locationName: record.location_name,
+    employeeId: String(record.employee_id),
+    employeeName: record.employee_name,
+    checkInAt: record.check_in_at,
+    checkOutAt: record.check_out_at,
+    status: record.check_out_at ? 'checked_out' : 'working',
+  };
+}
+
+function buildSiteVisits(
+  todayRecords: AttendanceDbRecord[],
+  projectIds: Set<string>,
+): TodaySiteVisit[] {
+  return todayRecords
+    .filter((record) => record.project_id && projectIds.has(String(record.project_id)))
+    .map(mapSiteVisit)
+    .filter((visit): visit is TodaySiteVisit => visit != null)
+    .sort((a, b) => {
+      const aTime = a.checkInAt ? new Date(a.checkInAt).getTime() : 0;
+      const bTime = b.checkInAt ? new Date(b.checkInAt).getTime() : 0;
+      return bTime - aTime;
+    });
+}
 
 export async function getTodayOverviewForProjects(
   userId: string,
@@ -29,6 +74,7 @@ export async function getTodayOverviewForProjects(
       absent: 0,
       projectNames: [],
       projectCount: 0,
+      siteVisits: [],
     };
   }
 
@@ -56,6 +102,8 @@ export async function getTodayOverviewForProjects(
 
   const absent = projectRecords.filter((record) => !record.check_in_at).length;
 
+  const siteVisits = buildSiteVisits(todayRecords, projectIds);
+
   return {
     total: teamEmployees.length,
     checkedIn: checkedInIds.size,
@@ -63,5 +111,6 @@ export async function getTodayOverviewForProjects(
     absent,
     projectNames,
     projectCount: projectNames.length,
+    siteVisits,
   };
 }

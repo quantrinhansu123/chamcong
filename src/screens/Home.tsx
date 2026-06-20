@@ -79,6 +79,15 @@ export default function Home() {
     absent: 0,
     projectNames: [] as string[],
     projectCount: 0,
+    siteVisits: [] as Array<{
+      id: string;
+      projectName: string;
+      locationName: string | null;
+      employeeName: string;
+      checkInAt: string | null;
+      checkOutAt: string | null;
+      status: 'working' | 'checked_out';
+    }>,
     loading: true,
   });
   const {
@@ -100,6 +109,15 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const refreshTodayRecord = useCallback(async () => {
+    try {
+      const todayRecord = await getTodayAttendance();
+      setRecord(todayRecord);
+    } catch {
+      // ignore — record may not exist yet
+    }
+  }, []);
+
   useEffect(() => {
     const configError = getSupabaseConfigError();
     if (configError) {
@@ -108,11 +126,14 @@ export default function Home() {
       return;
     }
 
-    getTodayAttendance()
-      .then(setRecord)
+    if (employeeResolving) {
+      return;
+    }
+
+    refreshTodayRecord()
       .catch((err) => setError(getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'Không tải được dữ liệu chấm công.'))))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshTodayRecord, employee?.id, employeeResolving]);
 
   const loadOverview = useCallback(async () => {
     if (getSupabaseConfigError()) {
@@ -134,6 +155,7 @@ export default function Home() {
         absent: 0,
         projectNames: [],
         projectCount: 0,
+        siteVisits: [],
         loading: false,
       });
       return;
@@ -147,6 +169,7 @@ export default function Home() {
         absent: 0,
         projectNames: [],
         projectCount: 0,
+        siteVisits: [],
         loading: false,
       });
       return;
@@ -166,6 +189,7 @@ export default function Home() {
           absent: 0,
           projectNames: [],
         projectCount: 0,
+        siteVisits: [],
           loading: false,
         });
         return;
@@ -179,6 +203,7 @@ export default function Home() {
         absent: data.absent ?? 0,
         projectNames: data.projectNames ?? [],
         projectCount: data.projectCount ?? 0,
+        siteVisits: data.siteVisits ?? [],
         loading: false,
       });
     } catch {
@@ -189,6 +214,7 @@ export default function Home() {
         absent: 0,
         projectNames: [],
         projectCount: 0,
+        siteVisits: [],
         loading: false,
       });
     }
@@ -321,6 +347,7 @@ export default function Home() {
         setLocationCompareText(formatLocationCompare(location));
       }
       const updatedRecord = await checkIn(location, productSelection);
+      await refreshTodayRecord();
       refreshProjects();
       loadOverview();
       return {
@@ -340,6 +367,7 @@ export default function Home() {
     runAction('check-out', async () => {
       const { location, warning } = await getLocationForAttendance();
       const updatedRecord = await checkOut(record, location);
+      await refreshTodayRecord();
       refreshProjects();
       loadOverview();
       return {
@@ -611,6 +639,47 @@ export default function Home() {
               <span className="text-[12px] font-bold">{overview.loading ? '—' : overview.absent}</span>
             </div>
           </div>
+        </div>
+
+        <div className="border-t border-outline-variant/15 pt-4">
+          <p className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-3">
+            Địa điểm đã check-in / check-out
+          </p>
+          {overview.loading || employeeResolving ? (
+            <p className="text-[12px] text-on-surface-variant">Đang tải...</p>
+          ) : (overview.siteVisits ?? []).length === 0 ? (
+            <p className="text-[12px] text-on-surface-variant">Chưa có ai check-in hôm nay.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {(overview.siteVisits ?? []).map((visit) => (
+                <div
+                  key={visit.id}
+                  className="rounded-xl border border-outline-variant/15 bg-surface-container-low/60 px-3 py-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-bold text-on-surface truncate">{visit.projectName}</p>
+                      <p className="text-[11px] text-on-surface-variant truncate">
+                        {visit.employeeName}
+                        {visit.locationName ? ` · ${visit.locationName}` : ''}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      visit.status === 'working'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        : 'bg-surface-container text-outline border border-outline-variant/20'
+                    }`}>
+                      {visit.status === 'working' ? 'Đang làm' : 'Đã out'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant mt-1.5">
+                    In {formatTime(visit.checkInAt)}
+                    {visit.checkOutAt ? ` · Out ${formatTime(visit.checkOutAt)}` : ' · Chưa check-out'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
