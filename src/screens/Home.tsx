@@ -571,7 +571,7 @@ export default function Home() {
                 ? 'Đang tải dự án...'
                 : (overview.projectNames ?? []).length > 0
                   ? (overview.projectNames ?? []).join(', ')
-                  : 'Chưa có dự án được gán'}
+                  : 'Chưa có dự án assignees khớp tên của bạn'}
             </p>
           </div>
           <Link to="/bao-cao" className="text-[12px] font-bold text-on-surface flex items-center gap-1 hover:opacity-80 transition-opacity">

@@ -1,11 +1,13 @@
+import { normalizeEmployeeName } from './attendanceSheetUtils';
+import { findStaffById, findStaffByName, isValidQueryUserId, resolveQueryUserId } from './staffService';
 import { supabase } from './supabase';
-import { isValidQueryUserId, resolveQueryUserId } from './staffService';
 import type { ProductWithLocations } from '../types';
 
 type ProjectRow = {
   project_id: string;
   name: string;
   status: string | null;
+  assignees?: unknown;
 };
 
 function mapProject(row: ProjectRow): ProductWithLocations {
@@ -39,6 +41,60 @@ export async function getProjectsForCheckIn(): Promise<ProductWithLocations[]> {
 
 export async function getAllProjects(): Promise<ProductWithLocations[]> {
   return getProjectsForCheckIn();
+}
+
+function assigneeMatchesName(assignee: unknown, targetNames: string[]) {
+  const assigneeName = typeof assignee === 'string'
+    ? assignee
+    : assignee && typeof assignee === 'object' && 'name' in assignee
+      ? String((assignee as { name?: string }).name ?? '')
+      : String(assignee ?? '');
+
+  if (!assigneeName.trim()) return false;
+
+  const normalizedAssignee = normalizeEmployeeName(assigneeName);
+  return targetNames.some((target) => {
+    const normalizedTarget = normalizeEmployeeName(target);
+    if (!normalizedTarget) return false;
+    return normalizedAssignee === normalizedTarget
+      || normalizedAssignee.includes(normalizedTarget)
+      || normalizedTarget.includes(normalizedAssignee);
+  });
+}
+
+async function collectNamesForAssigneeMatch(userId: string, userName?: string): Promise<string[]> {
+  const names = new Set<string>();
+  if (userName?.trim()) names.add(userName.trim());
+
+  const effectiveId = await resolveEffectiveUserId(userId, userName);
+  if (effectiveId) {
+    const staff = await findStaffById(effectiveId).catch(() => null);
+    if (staff?.full_name) names.add(staff.full_name);
+  } else if (userName?.trim()) {
+    const staff = await findStaffByName(userName.trim()).catch(() => null);
+    if (staff?.full_name) names.add(staff.full_name);
+  }
+
+  return Array.from(names);
+}
+
+async function getProjectsByAssigneeNames(names: string[]): Promise<ProductWithLocations[]> {
+  const uniqueNames = Array.from(new Set(names.map((name) => name.trim()).filter(Boolean)));
+  if (!supabase || uniqueNames.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('projects')
+    .select('project_id, name, status, assignees')
+    .not('assignees', 'is', null)
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  if (!data?.length) return [];
+
+  return (data as ProjectRow[])
+    .filter((row) => Array.isArray(row.assignees)
+      && row.assignees.some((assignee) => assigneeMatchesName(assignee, uniqueNames)))
+    .map(mapProject);
 }
 
 async function getProjectIdsFromWorkSessions(userId: string): Promise<string[]> {
@@ -115,8 +171,14 @@ async function getProjectsByIds(projectIds: string[]): Promise<ProductWithLocati
 }
 
 export async function getProjectsForUser(userId: string, userName?: string): Promise<ProductWithLocations[]> {
+  const namesToMatch = await collectNamesForAssigneeMatch(userId, userName);
+  if (namesToMatch.length === 0) return [];
+
+  const assigneeProjects = await getProjectsByAssigneeNames(namesToMatch);
+  if (assigneeProjects.length > 0) return assigneeProjects;
+
   const effectiveId = await resolveEffectiveUserId(userId, userName);
-  if (!effectiveId) return getProjectsForCheckIn();
+  if (!effectiveId) return [];
 
   const sessionProjectIds = await getProjectIdsFromWorkSessions(effectiveId).catch(() => []);
   if (sessionProjectIds.length > 0) {
@@ -124,5 +186,5 @@ export async function getProjectsForUser(userId: string, userName?: string): Pro
     if (projects.length > 0) return projects;
   }
 
-  return getProjectsForCheckIn();
+  return [];
 }
