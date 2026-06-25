@@ -33,7 +33,7 @@ Yêu cầu: `Node.js`
    npm run dev
    ```
 3. Mở:
-   `http://localhost:3000`
+   `http://localhost:3001`
 
 ## Supabase setup
 

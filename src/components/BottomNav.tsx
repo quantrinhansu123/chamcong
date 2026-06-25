@@ -7,9 +7,9 @@ const items = [
   { path: '/cai-dat', label: 'Cài đặt', icon: Settings, end: false },
 ];
 
-export default function BottomNav() {
+export default function BottomNav({ wide = false }: { wide?: boolean }) {
   return (
-    <nav className="fixed bottom-0 left-1/2 w-full max-w-lg -translate-x-1/2 bg-surface-container-lowest/90 backdrop-blur-xl border-t border-outline-variant/10 px-4 py-2 flex justify-around items-center z-50 shadow-[0_-8px_24px_rgba(6,43,36,0.06)]">
+    <nav className={`fixed bottom-0 left-1/2 w-full -translate-x-1/2 bg-surface-container-lowest/90 backdrop-blur-xl border-t border-outline-variant/10 px-4 py-2 flex justify-around items-center z-50 shadow-[0_-8px_24px_rgba(6,43,36,0.06)] ${wide ? 'max-w-full' : 'max-w-lg'}`}>
       {items.map((item) => {
         const Icon = item.icon;
         return (

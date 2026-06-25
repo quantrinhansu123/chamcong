@@ -215,7 +215,7 @@ export default function Reports() {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex flex-col gap-4"
+      className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-3 py-4 sm:px-5"
     >
       <div className="flex justify-between items-center py-3 bg-surface sticky top-0 z-40">
         <div className="flex items-center gap-3">
@@ -270,7 +270,7 @@ export default function Reports() {
         </div>
       )}
 
-      <section className="bg-white rounded-xl p-3.5 border border-outline-variant/10 space-y-3">
+      <section className="bg-white rounded-xl p-3 sm:p-4 border border-outline-variant/10 space-y-3 overflow-hidden">
         <h3 className="text-sm font-bold text-primary">Tổng hợp</h3>
 
         <div className="grid grid-cols-3 gap-2">
@@ -310,7 +310,7 @@ export default function Reports() {
         </div>
       </section>
 
-      <section className="bg-white rounded-xl p-3.5 border border-outline-variant/10 space-y-3">
+      <section className="bg-white rounded-xl p-3 sm:p-4 border border-outline-variant/10 space-y-3 overflow-hidden">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-primary">Bảng công</h3>
           <div className="flex gap-2.5 text-[9px] font-semibold text-on-surface-variant">

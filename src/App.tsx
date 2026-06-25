@@ -25,10 +25,10 @@ export default function App() {
           </Route>
           <Route element={<WideLayout />}>
             <Route path="/bang-cong" element={<AttendanceSheet />} />
+            <Route path="/bao-cao" element={<Reports />} />
           </Route>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Home />} />
-            <Route path="/bao-cao" element={<Reports />} />
             <Route path="/cai-dat" element={<Settings />} />
             <Route path="/lich-su" element={<History />} />
             <Route path="*" element={<Navigate to="/" replace />} />

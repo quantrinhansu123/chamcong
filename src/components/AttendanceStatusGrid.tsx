@@ -149,16 +149,16 @@ export default function AttendanceStatusGrid({
         <table className="w-full border-collapse bg-white">
           <thead>
             <tr className="bg-surface-container-low border-b border-outline-variant/10">
-              <th className="sticky left-0 z-20 bg-surface-container-low px-3 py-2.5 text-[10px] font-bold text-on-surface-variant uppercase text-left min-w-[88px] border-r border-outline-variant/10">
+              <th className="sticky left-0 z-20 bg-surface-container-low px-3 py-2.5 text-[10px] font-bold text-on-surface-variant uppercase text-left min-w-[100px] border-r border-outline-variant/10">
                 Nhân viên
               </th>
-              <th className="sticky left-[88px] z-20 bg-surface-container-low px-2 py-2.5 text-[10px] font-bold text-on-surface-variant uppercase text-left min-w-[72px] border-r border-outline-variant/10">
+              <th className="sticky left-[100px] z-20 bg-surface-container-low px-2 py-2.5 text-[10px] font-bold text-on-surface-variant uppercase text-left min-w-[88px] border-r border-outline-variant/10">
                 Dự án
               </th>
               {currentWeekDays.map((day) => {
                 const date = new Date(year, monthIndex, day);
                 return (
-                  <th key={day} className="px-1 py-2.5 text-center min-w-[36px]">
+                  <th key={day} className="px-1 py-2.5 text-center min-w-[44px]">
                     <p className="text-[9px] text-on-surface-variant">{weekdayLabels[date.getDay()]}</p>
                     <p className="text-[11px] font-bold text-primary">{day}</p>
                   </th>
@@ -170,11 +170,11 @@ export default function AttendanceStatusGrid({
             {rows.map((row) => (
               <tr key={row.employee.id} className="border-b border-outline-variant/5 last:border-0">
                 <td className="sticky left-0 z-10 bg-white px-3 py-2 border-r border-outline-variant/10">
-                  <p className="text-[10px] font-bold text-primary truncate max-w-[80px]">
+                  <p className="text-[10px] font-bold text-primary truncate max-w-[96px]">
                     {row.employee.full_name}
                   </p>
                 </td>
-                <td className="sticky left-[88px] z-10 bg-white px-2 py-2 border-r border-outline-variant/10 align-top">
+                <td className="sticky left-[100px] z-10 bg-white px-2 py-2 border-r border-outline-variant/10 align-top">
                   {row.weekProjects.length > 0 ? (
                     <div className="flex flex-col gap-0.5">
                       {row.weekProjects.map((name) => (
@@ -213,7 +213,7 @@ export default function AttendanceStatusGrid({
               <td className="sticky left-0 z-10 bg-surface-container-low px-3 py-3 text-[10px] font-bold text-on-surface-variant uppercase border-r border-outline-variant/10">
                 Tổng hợp
               </td>
-              <td className="sticky left-[88px] z-10 bg-surface-container-low border-r border-outline-variant/10" />
+              <td className="sticky left-[100px] z-10 bg-surface-container-low border-r border-outline-variant/10" />
               {currentWeekDays.map((day) => {
                 let onTime = 0;
                 let late = 0;
