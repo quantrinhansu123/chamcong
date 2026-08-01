@@ -113,11 +113,7 @@ export default function DesktopChamCong() {
   const handleCheckIn = async () => {
     if (record?.check_in_at || !selection) {
       if (!selection) {
-        setError(
-          officeLocation
-            ? 'Vui lòng chọn dự án trước khi chấm công.'
-            : 'Chưa cấu hình vị trí cho dự án. Vào Cài đặt → Dự án → Lấy vị trí.',
-        );
+        setError('Vui lòng chọn dự án trước khi chấm công.');
       }
       return;
     }

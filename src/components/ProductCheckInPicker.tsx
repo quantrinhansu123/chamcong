@@ -21,7 +21,7 @@ export default function ProductCheckInPicker({
   selectedProductId,
   onProductChange,
   compact = false,
-  emptyMessage = 'Chưa có dự án nào gán bạn trong assignees. Kiểm tra tên trên link ?name=...',
+  emptyMessage = 'Chưa có dự án nào gán bạn trong assignees. Kiểm tra tên trên link ?name=... khớp với assignees của dự án.',
 }: ProductCheckInPickerProps) {
   if (loading) {
     return (

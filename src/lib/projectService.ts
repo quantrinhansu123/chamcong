@@ -1,5 +1,5 @@
 import { normalizeEmployeeName } from './attendanceSheetUtils';
-import { findStaffById, findStaffByName, isValidQueryUserId, resolveQueryUserId } from './staffService';
+import { isValidQueryUserId, resolveQueryUserId } from './staffService';
 import { supabase } from './supabase';
 import type { ProductWithLocations } from '../types';
 
@@ -62,17 +62,18 @@ function assigneeMatchesName(assignee: unknown, targetNames: string[]) {
   });
 }
 
-async function collectNamesForAssigneeMatch(userId: string, userName?: string): Promise<string[]> {
+async function collectNamesForAssigneeMatch(_userId: string, userName?: string): Promise<string[]> {
   const names = new Set<string>();
-  if (userName?.trim()) names.add(userName.trim());
 
-  const effectiveId = await resolveEffectiveUserId(userId, userName);
-  if (effectiveId) {
-    const staff = await findStaffById(effectiveId).catch(() => null);
-    if (staff?.full_name) names.add(staff.full_name);
-  } else if (userName?.trim()) {
-    const staff = await findStaffByName(userName.trim()).catch(() => null);
-    if (staff?.full_name) names.add(staff.full_name);
+  // Chỉ lấy tên từ đường link (?name=...)
+  if (userName?.trim()) {
+    names.add(userName.trim());
+    return Array.from(names);
+  }
+
+  // Fallback: nếu không có ?name= mà userId là tên (không phải UUID)
+  if (_userId?.trim() && !isValidQueryUserId(_userId)) {
+    names.add(_userId.trim());
   }
 
   return Array.from(names);
@@ -170,21 +171,9 @@ async function getProjectsByIds(projectIds: string[]): Promise<ProductWithLocati
   return (data as ProjectRow[] | null)?.map(mapProject) ?? [];
 }
 
+/** Chỉ dự án có tên trên link (?name=) nằm trong assignees. */
 export async function getProjectsForUser(userId: string, userName?: string): Promise<ProductWithLocations[]> {
   const namesToMatch = await collectNamesForAssigneeMatch(userId, userName);
   if (namesToMatch.length === 0) return [];
-
-  const assigneeProjects = await getProjectsByAssigneeNames(namesToMatch);
-  if (assigneeProjects.length > 0) return assigneeProjects;
-
-  const effectiveId = await resolveEffectiveUserId(userId, userName);
-  if (!effectiveId) return [];
-
-  const sessionProjectIds = await getProjectIdsFromWorkSessions(effectiveId).catch(() => []);
-  if (sessionProjectIds.length > 0) {
-    const projects = await getProjectsByIds(sessionProjectIds);
-    if (projects.length > 0) return projects;
-  }
-
-  return [];
+  return getProjectsByAssigneeNames(namesToMatch);
 }

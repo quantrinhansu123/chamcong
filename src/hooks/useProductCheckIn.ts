@@ -140,13 +140,13 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
 
   const selection = useMemo((): CheckInProductSelection | null => {
     const project = projects.find((p) => p.id === selectedProductId);
-    if (!project || !checkInLocation) return null;
+    if (!project) return null;
     if (todayRecord?.check_out_at) return null;
 
     return {
       projectId: project.id,
       projectName: project.name,
-      locationName: checkInLocation.name,
+      locationName: checkInLocation?.name ?? project.name,
     };
   }, [projects, selectedProductId, checkInLocation, todayRecord?.check_out_at]);
 

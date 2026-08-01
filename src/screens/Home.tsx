@@ -323,11 +323,7 @@ export default function Home() {
   const handleCheckIn = () => {
     if (record?.check_in_at) return;
     if (!productSelection) {
-      setError(
-        officeLocation
-          ? 'Vui lòng chọn dự án trước khi check-in.'
-          : 'Chưa cấu hình vị trí cho dự án. Vào Cài đặt → Dự án → Lấy vị trí.',
-      );
+      setError('Vui lòng chọn dự án trước khi check-in.');
       return;
     }
     runAction('check-in', async () => {
