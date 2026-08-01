@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 !.env.local
+supabase/export-data.sql
+supabase/export-data.json

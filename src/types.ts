@@ -71,6 +71,8 @@ export interface AttendanceDbRecord {
   check_in_lng: number | null;
   check_out_lat: number | null;
   check_out_lng: number | null;
+  check_in_photo_url: string | null;
+  check_out_photo_url: string | null;
   last_lat: number | null;
   last_lng: number | null;
   location_accuracy_m: number | null;

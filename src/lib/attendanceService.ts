@@ -500,6 +500,7 @@ export async function getEmployeeAttendanceRecords(
 export async function checkIn(
   location: GeoPoint | null,
   product: CheckInProductSelection,
+  photoUrl?: string | null,
 ) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
@@ -512,6 +513,10 @@ export async function checkIn(
 
   if (!product.projectId) {
     throw new Error('Vui lòng chọn dự án trước khi check-in.');
+  }
+
+  if (!photoUrl?.trim()) {
+    throw new Error('Chấm công phải chụp ảnh.');
   }
 
   const now = new Date().toISOString();
@@ -531,6 +536,7 @@ export async function checkIn(
         check_in_at: now,
         check_in_lat: location?.lat ?? null,
         check_in_lng: location?.lng ?? null,
+        check_in_photo_url: photoUrl,
         last_lat: location?.lat ?? null,
         last_lng: location?.lng ?? null,
         location_accuracy_m: location?.accuracy ?? null,
@@ -546,9 +552,17 @@ export async function checkIn(
   return data as AttendanceDbRecord;
 }
 
-export async function checkOut(record: AttendanceDbRecord, location: GeoPoint | null) {
+export async function checkOut(
+  record: AttendanceDbRecord,
+  location: GeoPoint | null,
+  photoUrl?: string | null,
+) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
+  }
+
+  if (!photoUrl?.trim()) {
+    throw new Error('Check-out phải chụp ảnh.');
   }
 
   const { data, error } = await supabase
@@ -557,6 +571,7 @@ export async function checkOut(record: AttendanceDbRecord, location: GeoPoint | 
       check_out_at: new Date().toISOString(),
       check_out_lat: location?.lat ?? null,
       check_out_lng: location?.lng ?? null,
+      check_out_photo_url: photoUrl,
       last_lat: location?.lat ?? record.last_lat,
       last_lng: location?.lng ?? record.last_lng,
       location_accuracy_m: location?.accuracy ?? record.location_accuracy_m,
@@ -569,6 +584,64 @@ export async function checkOut(record: AttendanceDbRecord, location: GeoPoint | 
 
   if (error) throw error;
   return data;
+}
+
+/** Lấy GPS im lặng — không chặn luồng chấm công nếu thất bại. */
+export async function getBrowserLocationQuiet(): Promise<GeoPoint | null> {
+  try {
+    return await getBrowserLocation();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Theo dõi GPS nền khi đang làm việc.
+ * Trả về hàm stop để hủy watch + interval.
+ */
+export function startBackgroundLocationTracking(
+  onLocation: (point: GeoPoint) => void | Promise<void>,
+  intervalMs = 60_000,
+): () => void {
+  if (!navigator.geolocation || window.isSecureContext === false) {
+    return () => undefined;
+  }
+
+  let stopped = false;
+  let watchId: number | null = null;
+  let timer: number | null = null;
+  let lastSentAt = 0;
+
+  const emit = (point: GeoPoint) => {
+    if (stopped) return;
+    const now = Date.now();
+    if (now - lastSentAt < 15_000) return;
+    lastSentAt = now;
+    void onLocation(point);
+  };
+
+  const pollOnce = () => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => emit(mapGeolocationPosition(position)),
+      () => undefined,
+      { enableHighAccuracy: false, maximumAge: 30_000, timeout: 20_000 },
+    );
+  };
+
+  watchId = navigator.geolocation.watchPosition(
+    (position) => emit(mapGeolocationPosition(position)),
+    () => undefined,
+    { enableHighAccuracy: false, maximumAge: 30_000, timeout: 20_000 },
+  );
+
+  pollOnce();
+  timer = window.setInterval(pollOnce, intervalMs);
+
+  return () => {
+    stopped = true;
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    if (timer !== null) window.clearInterval(timer);
+  };
 }
 
 export async function saveLocation(record: AttendanceDbRecord, location: GeoPoint) {

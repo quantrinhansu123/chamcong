@@ -39,6 +39,8 @@ create table if not exists public.attendance_records (
   check_in_lng numeric(10, 7),
   check_out_lat numeric(10, 7),
   check_out_lng numeric(10, 7),
+  check_in_photo_url text,
+  check_out_photo_url text,
   last_lat numeric(10, 7),
   last_lng numeric(10, 7),
   location_accuracy_m numeric(10, 2),
@@ -87,7 +89,9 @@ alter table public.attendance_records
   add column if not exists product_id uuid references public.products (id) on delete set null,
   add column if not exists product_location_id uuid references public.product_locations (id) on delete set null,
   add column if not exists product_name text,
-  add column if not exists location_name text;
+  add column if not exists location_name text,
+  add column if not exists check_in_photo_url text,
+  add column if not exists check_out_photo_url text;
 
 create index if not exists attendance_records_product_idx on public.attendance_records (product_id, work_date desc);
 

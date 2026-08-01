@@ -37,9 +37,9 @@ Yêu cầu: `Node.js`
 
 ## Supabase setup
 
-1. Tạo project Supabase.
-2. Vào `SQL Editor`.
-3. Chạy file [supabase/schema.sql](supabase/schema.sql).
+1. Tạo project Supabase mới.
+2. Vào `SQL Editor` → New query.
+3. Dán **toàn bộ** file [supabase/init-all.sql](supabase/init-all.sql) → **Run** (1 lần là đủ: bảng + RLS + storage ảnh + dữ liệu mẫu).
 4. Cấu hình env trong `.env.local`:
 
 ```env
@@ -48,6 +48,10 @@ VITE_SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
 ```
 
 5. Restart `npm run dev`.
+
+Test nhanh sau khi chạy SQL:
+- Mở `http://localhost:3001/?name=Nguyen+Van+A&userId=1001`
+- Chọn dự án Demo → Check-in (có chụp ảnh)
 
 ## Dữ liệu chấm công
 

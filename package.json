@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "db:seed": "node scripts/setup-supabase.mjs"
+    "db:seed": "node scripts/setup-supabase.mjs",
+    "db:export": "node scripts/export-supabase-data.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
