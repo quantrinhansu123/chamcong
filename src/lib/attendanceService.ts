@@ -500,7 +500,6 @@ export async function getEmployeeAttendanceRecords(
 export async function checkIn(
   location: GeoPoint | null,
   product: CheckInProductSelection,
-  photoUrl?: string | null,
 ) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
@@ -513,10 +512,6 @@ export async function checkIn(
 
   if (!product.projectId) {
     throw new Error('Vui lòng chọn dự án trước khi check-in.');
-  }
-
-  if (!photoUrl?.trim()) {
-    throw new Error('Chấm công phải chụp ảnh.');
   }
 
   const now = new Date().toISOString();
@@ -536,7 +531,6 @@ export async function checkIn(
         check_in_at: now,
         check_in_lat: location?.lat ?? null,
         check_in_lng: location?.lng ?? null,
-        check_in_photo_url: photoUrl,
         last_lat: location?.lat ?? null,
         last_lng: location?.lng ?? null,
         location_accuracy_m: location?.accuracy ?? null,
@@ -555,14 +549,9 @@ export async function checkIn(
 export async function checkOut(
   record: AttendanceDbRecord,
   location: GeoPoint | null,
-  photoUrl?: string | null,
 ) {
   if (!supabase) {
     throw new Error('Chưa cấu hình Supabase.');
-  }
-
-  if (!photoUrl?.trim()) {
-    throw new Error('Check-out phải chụp ảnh.');
   }
 
   const { data, error } = await supabase
@@ -571,7 +560,6 @@ export async function checkOut(
       check_out_at: new Date().toISOString(),
       check_out_lat: location?.lat ?? null,
       check_out_lng: location?.lng ?? null,
-      check_out_photo_url: photoUrl,
       last_lat: location?.lat ?? record.last_lat,
       last_lng: location?.lng ?? record.last_lng,
       location_accuracy_m: location?.accuracy ?? record.location_accuracy_m,

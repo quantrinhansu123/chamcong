@@ -15,6 +15,7 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    cacheDir: path.resolve('C:/Users/Admin/AppData/Local/Temp/jarviz-vite-cache'),
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Explicit host/clientPort avoids WS 400 when Vite binds 0.0.0.0.

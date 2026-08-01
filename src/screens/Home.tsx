@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { AttendanceDbRecord, GeoPoint } from '../types';
-import AttendancePhotoCapture from '../components/AttendancePhotoCapture';
 import ProductCheckInPicker from '../components/ProductCheckInPicker';
 import { useProductCheckIn } from '../hooks/useProductCheckIn';
 import UserAvatar from '../components/UserAvatar';
@@ -28,7 +27,6 @@ import {
   saveTodayLocation,
   startBackgroundLocationTracking,
 } from '../lib/attendanceService';
-import { uploadAttendancePhoto } from '../lib/attendancePhotoService';
 import { getTodayOverviewForProjects } from '../lib/overviewService';
 import { isAnonymousUserId, isValidQueryUserId, resolveQueryUserId } from '../lib/staffService';
 import { compareWithLocation } from '../lib/settingsService';
@@ -72,7 +70,6 @@ export default function Home() {
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<'check-in' | 'check-out' | 'location' | null>(null);
-  const [photoAction, setPhotoAction] = useState<'check-in' | 'check-out' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -333,62 +330,42 @@ export default function Home() {
       );
       return;
     }
-    setError(null);
-    setPhotoAction('check-in');
-  };
-
-  const handleCheckOut = () => {
-    if (!record?.check_in_at || record.check_out_at) return;
-    setError(null);
-    setPhotoAction('check-out');
-  };
-
-  const handlePhotoConfirm = async (file: Blob) => {
-    const action = photoAction;
-    if (!action) return;
-
-    if (action === 'check-in' && !productSelection) {
-      setError('Vui lòng chọn dự án trước khi check-in.');
-      setPhotoAction(null);
-      return;
-    }
-
-    if (action === 'check-out' && (!record?.check_in_at || record.check_out_at)) {
-      setPhotoAction(null);
-      return;
-    }
-
-    await runAction(action, async () => {
-      const locationPromise = getBrowserLocationQuiet();
-      const photoUrl = await uploadAttendancePhoto({
-        employeeId: employee.id,
-        kind: action,
-        file,
-      });
-      const location = await locationPromise;
-
+    runAction('check-in', async () => {
+      const location = await getBrowserLocationQuiet();
       if (location) {
         setLocationCompareText(formatLocationCompare(location));
         setLocationError(null);
       } else {
         setLocationError('GPS đang lấy nền — sẽ cập nhật khi có tín hiệu.');
       }
-
-      const updatedRecord = action === 'check-in'
-        ? await checkIn(location, productSelection!, photoUrl)
-        : await checkOut(record!, location, photoUrl);
-
-      setPhotoAction(null);
+      const updatedRecord = await checkIn(location, productSelection);
       await refreshTodayRecord();
       refreshProjects();
       loadOverview();
-
       return {
         record: updatedRecord,
         locationError: location ? null : 'GPS đang chạy nền. Sẽ tự cập nhật khi lấy được vị trí.',
         message: location
-          ? `${action === 'check-in' ? 'Check-in' : 'Check-out'} thành công (đã chụp ảnh). ${formatLocationCompare(location)}`
-          : `${action === 'check-in' ? 'Check-in' : 'Check-out'} thành công (đã chụp ảnh). GPS đang chạy nền.`,
+          ? `Check-in thành công. ${formatLocationCompare(location)}`
+          : 'Check-in thành công. GPS đang chạy nền.',
+      };
+    });
+  };
+
+  const handleCheckOut = () => {
+    if (!record?.check_in_at || record.check_out_at) return;
+    runAction('check-out', async () => {
+      const location = await getBrowserLocationQuiet();
+      const updatedRecord = await checkOut(record, location);
+      await refreshTodayRecord();
+      refreshProjects();
+      loadOverview();
+      return {
+        record: updatedRecord,
+        locationError: location ? null : 'GPS đang chạy nền. Sẽ tự cập nhật khi lấy được vị trí.',
+        message: location
+          ? `Check-out thành công. ${formatLocationCompare(location)}`
+          : 'Check-out thành công. GPS đang chạy nền.',
       };
     });
   };
@@ -721,17 +698,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-      <AttendancePhotoCapture
-        open={photoAction !== null}
-        title={photoAction === 'check-out' ? 'Chụp ảnh check-out' : 'Chụp ảnh check-in'}
-        busy={busyAction === 'check-in' || busyAction === 'check-out'}
-        onCancel={() => {
-          if (busyAction === 'check-in' || busyAction === 'check-out') return;
-          setPhotoAction(null);
-        }}
-        onConfirm={handlePhotoConfirm}
-      />
     </motion.div>
   );
 }

@@ -10,7 +10,6 @@ import {
   Package,
 } from 'lucide-react';
 import ProductCheckInPicker from '../components/ProductCheckInPicker';
-import AttendancePhotoCapture from '../components/AttendancePhotoCapture';
 import UserAvatar from '../components/UserAvatar';
 import { useProductCheckIn } from '../hooks/useProductCheckIn';
 import { useEmployee } from '../context/EmployeeContext';
@@ -22,7 +21,6 @@ import {
   saveTodayLocation,
   startBackgroundLocationTracking,
 } from '../lib/attendanceService';
-import { uploadAttendancePhoto } from '../lib/attendancePhotoService';
 import { compareWithLocation, type OfficeLocation } from '../lib/settingsService';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage, isSupabaseConfigured } from '../lib/supabase';
 import { ROUTES, type AttendanceDbRecord, type GeoPoint } from '../types';
@@ -70,7 +68,6 @@ export default function DesktopChamCong() {
   const [record, setRecord] = useState<AttendanceDbRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<'check-in' | 'check-out' | null>(null);
-  const [photoAction, setPhotoAction] = useState<'check-in' | 'check-out' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
@@ -113,7 +110,7 @@ export default function DesktopChamCong() {
     return `${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`;
   }, [record?.last_lat, record?.last_lng]);
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     if (record?.check_in_at || !selection) {
       if (!selection) {
         setError(
@@ -124,57 +121,45 @@ export default function DesktopChamCong() {
       }
       return;
     }
-    setError(null);
-    setPhotoAction('check-in');
-  };
 
-  const handleCheckOut = () => {
-    if (!record?.check_in_at || record.check_out_at) return;
-    setError(null);
-    setPhotoAction('check-out');
-  };
-
-  const handlePhotoConfirm = async (file: Blob) => {
-    const action = photoAction;
-    if (!action) return;
-
-    if (action === 'check-in' && !selection) {
-      setError('Vui lòng chọn dự án trước khi chấm công.');
-      setPhotoAction(null);
-      return;
-    }
-
-    if (action === 'check-out' && (!record?.check_in_at || record.check_out_at)) {
-      setPhotoAction(null);
-      return;
-    }
-
-    setBusyAction(action);
+    setBusyAction('check-in');
     setError(null);
     setMessage(null);
     try {
-      const locationPromise = getBrowserLocationQuiet();
-      const photoUrl = await uploadAttendancePhoto({
-        employeeId: employee.id,
-        kind: action,
-        file,
-      });
-      const location = await locationPromise;
-
-      const updated = action === 'check-in'
-        ? await checkIn(location, selection!, photoUrl)
-        : await checkOut(record!, location, photoUrl);
-
+      const location = await getBrowserLocationQuiet();
+      const updated = await checkIn(location, selection);
       setRecord(updated);
-      setPhotoAction(null);
       refreshProjects();
       setMessage(
         location
-          ? `${action === 'check-in' ? 'Chấm công' : 'Check-out'} thành công (đã chụp ảnh). ${formatLocationCompare(location, officeLocation)}`
-          : `${action === 'check-in' ? 'Chấm công' : 'Check-out'} thành công (đã chụp ảnh). GPS đang chạy nền.`,
+          ? `Chấm công thành công. ${formatLocationCompare(location, officeLocation)}`
+          : 'Chấm công thành công. GPS đang chạy nền.',
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không chấm công được.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!record?.check_in_at || record.check_out_at) return;
+
+    setBusyAction('check-out');
+    setError(null);
+    setMessage(null);
+    try {
+      const location = await getBrowserLocationQuiet();
+      const updated = await checkOut(record, location);
+      setRecord(updated);
+      refreshProjects();
+      setMessage(
+        location
+          ? `Check-out thành công. ${formatLocationCompare(location, officeLocation)}`
+          : 'Check-out thành công. GPS đang chạy nền.',
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không check-out được.');
     } finally {
       setBusyAction(null);
     }
@@ -323,17 +308,6 @@ export default function DesktopChamCong() {
           </div>
         </section>
       </div>
-
-      <AttendancePhotoCapture
-        open={photoAction !== null}
-        title={photoAction === 'check-out' ? 'Chụp ảnh check-out' : 'Chụp ảnh check-in'}
-        busy={busyAction !== null}
-        onCancel={() => {
-          if (busyAction) return;
-          setPhotoAction(null);
-        }}
-        onConfirm={handlePhotoConfirm}
-      />
     </div>
   );
 }

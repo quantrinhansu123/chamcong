@@ -46,10 +46,7 @@ export function getSupabaseRequestErrorMessage(err: unknown, fallback: string) {
     return 'Bảng attendance_records chưa có. Chạy supabase/migrate-attendance-records.sql trong Supabase SQL Editor.';
   }
   if (code === '42703' || (message.includes('column') && message.includes('does not exist'))) {
-    if (message.includes('photo')) {
-      return 'Database thiếu cột ảnh. Chạy supabase/migrate-attendance-photos.sql trên Supabase.';
-    }
-    return 'Database thiếu cột mới. Chạy supabase/migrate-attendance-project-id.sql hoặc migrate-attendance-photos.sql trên Supabase.';
+    return 'Database thiếu cột mới. Chạy supabase/migrate-attendance-project-id.sql trên Supabase.';
   }
   if (code === '22P02' || message.includes('invalid input syntax for type uuid')) {
     return 'Dữ liệu dự án không hợp lệ. Đã sửa app — tải lại trang và thử check-in lại.';
