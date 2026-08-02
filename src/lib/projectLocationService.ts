@@ -10,7 +10,7 @@ type ProjectLocationRow = {
 
 function mapRow(row: ProjectLocationRow, projectName?: string): OfficeLocation {
   return {
-    name: projectName?.trim() || 'Dự án',
+    name: projectName?.trim() || 'Project',
     lat: Number(row.lat),
     lng: Number(row.lng),
     radiusM: Math.max(50, Number(row.radius_m) || 200),
@@ -67,7 +67,7 @@ export async function saveProjectLocationToDb(
   radiusM: number,
 ) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { error } = await supabase

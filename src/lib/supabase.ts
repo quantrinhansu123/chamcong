@@ -16,10 +16,10 @@ function isPlaceholderKey(value?: string) {
 
 export function getSupabaseConfigError(): string | null {
   if (!supabaseUrl?.trim()) {
-    return 'Chưa cấu hình VITE_SUPABASE_URL trong .env.local.';
+    return 'VITE_SUPABASE_URL is not configured in .env.local.';
   }
   if (!supabaseAnonKey?.trim() || isPlaceholderKey(supabaseAnonKey)) {
-    return 'Chưa cấu hình VITE_SUPABASE_ANON_KEY. Lấy anon public key tại Supabase → Settings → API.';
+    return 'VITE_SUPABASE_ANON_KEY is not configured. Get the anon public key from Supabase → Settings → API.';
   }
   return null;
 }
@@ -37,25 +37,25 @@ export function getSupabaseRequestErrorMessage(err: unknown, fallback: string) {
   const details = typeof record?.details === 'string' ? record.details : '';
 
   if (message.includes('Invalid API key') || message.includes('JWT')) {
-    return 'API key Supabase không hợp lệ. Kiểm tra VITE_SUPABASE_ANON_KEY trong .env.local rồi restart npm run dev.';
+    return 'Invalid Supabase API key. Check VITE_SUPABASE_ANON_KEY in .env.local, then restart npm run dev.';
   }
   if (message === 'Failed to fetch' || (err instanceof Error && err.name === 'TypeError')) {
-    return 'Không kết nối được Supabase. Hãy kiểm tra mạng hoặc URL project.';
+    return 'Could not connect to Supabase. Check your network or project URL.';
   }
   if (code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) {
-    return 'Bảng attendance_records chưa có. Chạy supabase/migrate-attendance-records.sql trong Supabase SQL Editor.';
+    return 'The attendance_records table is missing. Run supabase/migrate-attendance-records.sql in the Supabase SQL Editor.';
   }
   if (code === '42703' || (message.includes('column') && message.includes('does not exist'))) {
-    return 'Database thiếu cột mới. Chạy supabase/migrate-attendance-project-id.sql trên Supabase.';
+    return 'Database is missing new columns. Run supabase/migrate-attendance-project-id.sql on Supabase.';
   }
   if (code === '22P02' || message.includes('invalid input syntax for type uuid')) {
-    return 'Dữ liệu dự án không hợp lệ. Đã sửa app — tải lại trang và thử check-in lại.';
+    return 'Invalid project data. The app was fixed — reload the page and try checking in again.';
   }
   if (code === '23503') {
-    return 'Dữ liệu tham chiếu không hợp lệ (FK). Chạy migrate-attendance-project-id.sql trên Supabase.';
+    return 'Invalid reference data (FK). Run migrate-attendance-project-id.sql on Supabase.';
   }
   if (code === '42501' || message.toLowerCase().includes('permission denied')) {
-    return 'Không có quyền truy cập Supabase (RLS). Kiểm tra policy cho bảng attendance_records.';
+    return 'No permission to access Supabase (RLS). Check policies for the attendance_records table.';
   }
 
   if (message) {

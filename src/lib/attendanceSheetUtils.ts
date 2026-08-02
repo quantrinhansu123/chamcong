@@ -18,29 +18,52 @@ export function normalizeWorkDate(value: string) {
 }
 
 export function buildAttendanceRecordMap(records: AttendanceDbRecord[]) {
-  const map = new Map<string, AttendanceDbRecord>();
+  const map = new Map<string, AttendanceDbRecord[]>();
+
+  const push = (key: string, record: AttendanceDbRecord) => {
+    const list = map.get(key) ?? [];
+    if (!list.some((item) => item.id === record.id)) {
+      list.push(record);
+    }
+    map.set(key, list);
+  };
 
   records.forEach((record) => {
     const dateKey = normalizeWorkDate(record.work_date);
     const id = String(record.employee_id);
     const nameKey = normalizeEmployeeName(record.employee_name);
 
-    map.set(`id:${id}:${dateKey}`, record);
-    map.set(`name:${nameKey}:${dateKey}`, record);
+    push(`id:${id}:${dateKey}`, record);
+    push(`name:${nameKey}:${dateKey}`, record);
+  });
+
+  map.forEach((list) => {
+    list.sort((left, right) => (left.check_in_at ?? left.created_at).localeCompare(right.check_in_at ?? right.created_at));
   });
 
   return map;
 }
 
-export function findAttendanceRecord(
-  map: Map<string, AttendanceDbRecord>,
+export function findAttendanceRecords(
+  map: Map<string, AttendanceDbRecord[]>,
   employee: StaffRecord,
   dateKey: string,
 ) {
   const id = String(employee.id);
   const nameKey = normalizeEmployeeName(employee.full_name);
 
-  return map.get(`id:${id}:${dateKey}`) ?? map.get(`name:${nameKey}:${dateKey}`);
+  return map.get(`id:${id}:${dateKey}`) ?? map.get(`name:${nameKey}:${dateKey}`) ?? [];
+}
+
+/** Ưu tiên phiên đang làm, không thì phiên gần nhất. */
+export function findAttendanceRecord(
+  map: Map<string, AttendanceDbRecord[]>,
+  employee: StaffRecord,
+  dateKey: string,
+) {
+  const sessions = findAttendanceRecords(map, employee, dateKey);
+  return sessions.find((row) => Boolean(row.check_in_at) && !row.check_out_at)
+    ?? sessions[sessions.length - 1];
 }
 
 export function mergeEmployeesWithAttendance(

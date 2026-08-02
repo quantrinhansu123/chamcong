@@ -47,7 +47,7 @@ const userSelect =
 
 export async function getAllStaff(): Promise<StaffRecord[]> {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase

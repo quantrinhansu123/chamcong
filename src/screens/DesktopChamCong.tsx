@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronRight,
   Loader2,
   LogIn,
   LogOut,
   MapPin,
   Package,
+  Route,
 } from 'lucide-react';
 import ProductCheckInPicker from '../components/ProductCheckInPicker';
+import TodayAttendanceCards from '../components/TodayAttendanceCards';
 import UserAvatar from '../components/UserAvatar';
 import { useProductCheckIn } from '../hooks/useProductCheckIn';
 import { useEmployee } from '../context/EmployeeContext';
@@ -52,15 +55,15 @@ function getStatusLabel(record: AttendanceDbRecord | null) {
 function formatLocationCompare(point: GeoPoint, location: OfficeLocation | null) {
   const result = compareWithLocation(point, location);
   if (!result.configured || !result.office) {
-    return 'Chưa cấu hình vị trí chấm công trong Cài đặt.';
+    return 'Check-in location is not configured in Settings.';
   }
 
   const distance = Math.round(result.distanceM);
   if (result.withinRadius) {
-    return `Trong phạm vi ${result.office.name} (${distance}m / ${result.office.radiusM}m)`;
+    return `Within range of ${result.office.name} (${distance}m / ${result.office.radiusM}m)`;
   }
 
-  return `Ngoài phạm vi ${result.office.name} (${distance}m, cho phép ${result.office.radiusM}m)`;
+  return `Outside range of ${result.office.name} (${distance}m, allowed ${result.office.radiusM}m)`;
 }
 
 export default function DesktopChamCong() {
@@ -83,6 +86,7 @@ export default function DesktopChamCong() {
     canCheckIn,
     loadError: projectsLoadError,
     checkedOutToday,
+    todaySessions,
     refreshProjects,
   } = useProductCheckIn(employee);
 
@@ -101,19 +105,21 @@ export default function DesktopChamCong() {
 
     getTodayAttendance()
       .then(setRecord)
-      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Không tải được dữ liệu chấm công.')))
+      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Could not load attendance data.')))
       .finally(() => setLoading(false));
   }, []);
 
   const locationText = useMemo(() => {
-    if (!record?.last_lat || !record?.last_lng) return 'Chưa ghi nhận GPS';
+    if (!record?.last_lat || !record?.last_lng) return 'No GPS recorded';
     return `${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`;
   }, [record?.last_lat, record?.last_lng]);
 
+  const isActiveCheckIn = Boolean(record?.check_in_at && !record?.check_out_at);
+
   const handleCheckIn = async () => {
-    if (record?.check_in_at || !selection) {
+    if (isActiveCheckIn || !selection) {
       if (!selection) {
-        setError('Vui lòng chọn dự án trước khi chấm công.');
+        setError('Please select a project before checking in.');
       }
       return;
     }
@@ -128,11 +134,11 @@ export default function DesktopChamCong() {
       refreshProjects();
       setMessage(
         location
-          ? `Chấm công thành công. ${formatLocationCompare(location, officeLocation)}`
-          : 'Chấm công thành công. GPS đang chạy nền.',
+          ? `Check-in successful. ${formatLocationCompare(location, officeLocation)}`
+          : 'Check-in successful. GPS is running in the background.',
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không chấm công được.');
+      setError(err instanceof Error ? err.message : 'Could not check in.');
     } finally {
       setBusyAction(null);
     }
@@ -151,11 +157,11 @@ export default function DesktopChamCong() {
       refreshProjects();
       setMessage(
         location
-          ? `Check-out thành công. ${formatLocationCompare(location, officeLocation)}`
-          : 'Check-out thành công. GPS đang chạy nền.',
+          ? `Check-out successful. You can select another project to check in again. ${formatLocationCompare(location, officeLocation)}`
+          : 'Check-out successful. You can select another project to check in again.',
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không check-out được.');
+      setError(err instanceof Error ? err.message : 'Could not check out.');
     } finally {
       setBusyAction(null);
     }
@@ -176,7 +182,7 @@ export default function DesktopChamCong() {
   }, [record?.check_in_at, record?.check_out_at]);
 
   const checkInDisabled =
-    loading || productsLoading || Boolean(busyAction) || Boolean(record?.check_in_at) || !canCheckIn || !isSupabaseConfigured;
+    loading || productsLoading || Boolean(busyAction) || isActiveCheckIn || !canCheckIn || !isSupabaseConfigured;
   const checkOutDisabled =
     loading || Boolean(busyAction) || !record?.check_in_at || Boolean(record?.check_out_at) || !isSupabaseConfigured;
 
@@ -198,50 +204,50 @@ export default function DesktopChamCong() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-2xl border border-outline-variant/15 p-6 space-y-5">
-          <div className="flex items-center gap-2 text-emerald-700">
+          <div className="flex items-center gap-2 text-red-700">
             <Package size={18} />
             <h2 className="font-bold">Chọn dự án</h2>
           </div>
 
-          {!record?.check_in_at && !checkedOutToday ? (
+          {!isActiveCheckIn ? (
             <div className="space-y-2">
+              {checkedOutToday && products.length > 0 && (
+                <p className="text-sm text-on-surface-variant bg-surface-container-low rounded-xl px-4 py-3">
+                  Checked out. Select another remaining project to check in again.
+                </p>
+              )}
               <ProductCheckInPicker
                 products={products}
                 loading={productsLoading}
                 loadError={projectsLoadError}
                 selectedProductId={selectedProductId}
                 onProductChange={handleProductChange}
+                emptyMessage={
+                  todaySessions.some((s) => s.check_in_at && s.check_out_at)
+                    ? 'You have already checked in to all assigned projects today.'
+                    : undefined
+                }
               />
-              {officeLocation ? (
+              {officeLocation && products.length > 0 ? (
                 <p className="text-xs text-on-surface-variant">
                   Vị trí chấm công: <span className="font-bold text-primary">{officeLocation.name}</span>
                   {' '}· bán kính {officeLocation.radiusM}m
                   {' '}({officeLocation.lat.toFixed(6)}, {officeLocation.lng.toFixed(6)})
                 </p>
-              ) : (
-                <p className="text-xs text-amber-700">
-                  Chưa cấu hình vị trí.{' '}
-                  <Link to={ROUTES.settings} className="font-bold underline">
-                    Vào Cài đặt → Dự án → Lấy vị trí
-                  </Link>
-                </p>
-              )}
+              ) : null}
             </div>
-          ) : checkedOutToday ? (
-            <p className="text-sm text-on-surface-variant bg-surface-container-low rounded-xl px-4 py-3">
-              Bạn đã check-out hôm nay. Không còn trong danh sách đang làm việc.
-            </p>
           ) : (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
-              <p className="text-sm font-bold text-emerald-800">{record?.product_name || '—'}</p>
-              <p className="text-xs text-emerald-700 mt-0.5">{record?.location_name || '—'}</p>
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3">
+              <p className="text-sm font-bold text-red-800">{record?.product_name || '—'}</p>
+              <p className="text-xs text-red-700 mt-0.5">{record?.location_name || '—'}</p>
+              <p className="text-xs text-red-700 mt-1">Check-out xong mới chọn được dự án khác.</p>
             </div>
           )}
 
           {(message || error) && (
             <div
               className={`rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${
-                error ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                error ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-red-50 text-red-700 border border-red-100'
               }`}
             >
               {error && <AlertCircle size={16} className="shrink-0" />}
@@ -254,7 +260,7 @@ export default function DesktopChamCong() {
               type="button"
               onClick={handleCheckIn}
               disabled={checkInDisabled}
-              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-red-600 text-white font-bold text-sm disabled:opacity-50"
             >
               {busyAction === 'check-in' ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
               Check-in
@@ -269,6 +275,22 @@ export default function DesktopChamCong() {
               Check-out
             </button>
           </div>
+
+          <TodayAttendanceCards sessions={todaySessions.filter((s) => Boolean(s.check_in_at))} />
+
+          <Link
+            to={ROUTES.attendanceSheet}
+            className="flex items-center gap-3 rounded-xl border border-outline-variant/15 bg-surface-container-low/50 px-4 py-3 hover:bg-surface-container-low transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
+              <Route size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-on-surface">Xem toàn bộ bảng công</p>
+              <p className="text-xs text-on-surface-variant">Theo dõi lộ trình chấm công theo ngày</p>
+            </div>
+            <ChevronRight size={18} className="text-outline shrink-0" />
+          </Link>
         </section>
 
         <section className="bg-white rounded-2xl border border-outline-variant/15 p-6 space-y-4">
@@ -297,7 +319,7 @@ export default function DesktopChamCong() {
               <p className="text-sm font-medium text-on-surface">{locationText}</p>
               {officeLocation && (
                 <p className="text-xs text-on-surface-variant mt-1">
-                  So sánh với {officeLocation.name} · bán kính {officeLocation.radiusM}m
+                  Compared with {officeLocation.name} · radius {officeLocation.radiusM}m
                 </p>
               )}
             </div>

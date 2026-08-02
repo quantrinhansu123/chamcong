@@ -25,7 +25,7 @@ function mapProject(row: ProjectRow): ProductWithLocations {
 
 export async function getProjectsForCheckIn(): Promise<ProductWithLocations[]> {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase

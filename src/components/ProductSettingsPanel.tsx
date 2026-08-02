@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, Loader2, LocateFixed, MapPin } from 'lucide-react';
 import { getBrowserLocation } from '../lib/attendanceService';
 import { getAllProjects } from '../lib/projectService';
@@ -54,7 +54,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
       setLocations(locationMap);
       onCountChange?.(rows.length);
     } catch (err) {
-      setError(getSupabaseRequestErrorMessage(err, 'Không tải được danh sách dự án.'));
+      setError(getSupabaseRequestErrorMessage(err, 'Could not load project list.'));
     } finally {
       setLoading(false);
     }
@@ -97,7 +97,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
         radiusM: saved.radiusM,
       });
     } catch (err) {
-      setError(getSupabaseRequestErrorMessage(err, 'Không tải được vị trí đã lưu.'));
+      setError(getSupabaseRequestErrorMessage(err, 'Could not load saved location.'));
     }
   }, [locations]);
 
@@ -123,7 +123,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
   const openGoogleMaps = (project: ProductWithLocations) => {
     const location = locations[project.id];
     if (!location) {
-      setError(`Dự án "${project.name}" chưa có tọa độ. Bấm vào tên dự án để cấu hình.`);
+      setError(`Project "${project.name}" has no coordinates yet. Tap the project name to configure.`);
       return;
     }
 
@@ -133,7 +133,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
 
   const persistLocation = async (lat: number, lng: number, radiusM: number): Promise<string | null> => {
     if (!selectedProject) {
-      setError('Vui lòng chọn dự án trước.');
+      setError('Please select a project first.');
       return null;
     }
 
@@ -157,9 +157,9 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
       const label = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       setLocationLabel(label);
       setDraftLocation({ lat: lat.toFixed(6), lng: lng.toFixed(6), radiusM });
-      return `Đã lưu vị trí cho dự án "${selectedProject.name}".`;
+      return `Location saved for project "${selectedProject.name}".`;
     } catch (err) {
-      setError(getSupabaseRequestErrorMessage(err, 'Không lưu được vị trí. Chạy migrate-project-locations.sql trên Supabase.'));
+      setError(getSupabaseRequestErrorMessage(err, 'Could not save location. Run migrate-project-locations.sql on Supabase.'));
       return null;
     } finally {
       setSaving(false);
@@ -180,7 +180,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
       const message = await persistLocation(point.lat, point.lng, draftLocation.radiusM);
       if (message) setSuccess(message);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không lấy được vị trí GPS.');
+      setError(err instanceof Error ? err.message : 'Could not get GPS location.');
     } finally {
       setLocating(false);
     }
@@ -190,7 +190,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
     const lat = Number(draftLocation.lat);
     const lng = Number(draftLocation.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setError('Vui lòng nhập tọa độ lat và lng hợp lệ.');
+      setError('Please enter valid lat and lng coordinates.');
       return;
     }
 
@@ -217,7 +217,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
         <button
           type="button"
           onClick={backToList}
-          className="flex items-center gap-1.5 text-sm font-bold text-emerald-700 w-fit"
+          className="flex items-center gap-1.5 text-sm font-bold text-red-700 w-fit"
         >
           <ChevronLeft size={18} />
           Danh sách dự án
@@ -261,7 +261,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-on-surface-variant">Tọa độ đã lưu</label>
-              <input readOnly value={locationLabel} placeholder="Chưa có tọa độ" className={inputClass} />
+              <input readOnly value={locationLabel} placeholder="No coordinates yet" className={inputClass} />
             </div>
           </div>
 
@@ -270,7 +270,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
               type="button"
               onClick={handleCaptureLocation}
               disabled={locating || saving}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-60"
             >
               {locating ? <Loader2 size={16} className="animate-spin" /> : <LocateFixed size={16} />}
               Lấy vị trí
@@ -288,7 +288,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
         </div>
 
         {success && (
-          <p className="text-[12px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+          <p className="text-[12px] font-medium text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
             {success}
           </p>
         )}
@@ -310,7 +310,7 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
 
       {projects.length === 0 ? (
         <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-3">
-          Chưa có dự án trong bảng projects.
+          No projects in the projects table.
         </p>
       ) : (
         <div className="flex flex-col divide-y divide-outline-variant/10 rounded-xl border border-outline-variant/15 overflow-hidden">
@@ -330,15 +330,15 @@ export default function ProductSettingsPanel({ onCountChange, onSaved }: Product
                   <p className="text-[11px] text-on-surface-variant mt-0.5 truncate">
                     {location
                       ? `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)} · ${location.radiusM}m`
-                      : 'Chưa có vị trí'}
+                      : 'No location yet'}
                   </p>
                 </button>
                 <button
                   type="button"
                   onClick={() => openGoogleMaps(project)}
                   disabled={!location}
-                  title={location ? 'Mở Google Maps' : 'Chưa có tọa độ'}
-                  className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={location ? 'Open Google Maps' : 'No coordinates yet'}
+                  className="w-10 h-10 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <MapPin size={18} />
                 </button>

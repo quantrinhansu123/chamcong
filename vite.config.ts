@@ -24,8 +24,8 @@ export default defineConfig(({mode}) => {
         : {
             protocol: 'ws',
             host: 'localhost',
-            port: 3001,
-            clientPort: 3001,
+            port: 3010,
+            clientPort: 3010,
           },
     },
   };

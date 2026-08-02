@@ -4,26 +4,26 @@
 @theme {
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
   
-  --color-primary: #001410;
-  --color-primary-container: #062b24;
-  --color-primary-fixed: #c5eadf;
-  --color-primary-fixed-dim: #aacec3;
+  --color-primary: #450a0a;
+  --color-primary-container: #b91c1c;
+  --color-primary-fixed: #fecaca;
+  --color-primary-fixed-dim: #fca5a5;
   
-  --color-secondary: #755b02;
-  --color-secondary-container: #fed97b;
-  --color-secondary-fixed: #ffdf91;
+  --color-secondary: #9f1239;
+  --color-secondary-container: #fecdd3;
+  --color-secondary-fixed: #ffe4e6;
   
-  --color-surface: #faf9f7;
+  --color-surface: #fffafa;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f4f4f2;
-  --color-surface-container: #eeeeec;
-  --color-surface-container-high: #e8e8e6;
-  --color-surface-container-highest: #e3e2e1;
+  --color-surface-container-low: #fef7f7;
+  --color-surface-container: #fceeee;
+  --color-surface-container-high: #f8e4e4;
+  --color-surface-container-highest: #f3d4d4;
   
-  --color-on-surface: #1a1c1b;
-  --color-on-surface-variant: #414846;
-  --color-outline: #717976;
-  --color-outline-variant: #c1c8c5;
+  --color-on-surface: #1c1917;
+  --color-on-surface-variant: #57534e;
+  --color-outline: #78716c;
+  --color-outline-variant: #e7d5d5;
 }
 
 @layer base {
@@ -36,12 +36,12 @@
 .glass-card {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(16px);
-  box-shadow: 0 4px 24px rgba(6, 43, 36, 0.08);
-  border: 1px solid rgba(193, 200, 197, 0.2);
+  box-shadow: 0 4px 24px rgba(185, 28, 28, 0.08);
+  border: 1px solid rgba(231, 213, 213, 0.35);
 }
 
 .ambient-shadow {
-  box-shadow: 0 8px 24px rgba(6, 43, 36, 0.04), 0 2px 8px rgba(6, 43, 36, 0.02);
+  box-shadow: 0 8px 24px rgba(185, 28, 28, 0.05), 0 2px 8px rgba(185, 28, 28, 0.03);
 }
 
 .header-bg {

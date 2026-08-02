@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   Bell,
   MoreHorizontal,
@@ -132,7 +132,7 @@ export default function Reports() {
         setEmployees(employeeRows);
         setReportState({ records, startDate, endDate });
       })
-      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Không tải được dữ liệu báo cáo.')))
+      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Could not load report data.')))
       .finally(() => setLoading(false));
   }, [period]);
 
@@ -193,19 +193,19 @@ export default function Reports() {
     .slice(0, 5);
 
   const statusItems = [
-    { icon: CheckCircle2, label: 'Đúng giờ', value: onTimeRecords, tone: 'emerald' as const },
+    { icon: CheckCircle2, label: 'Đúng giờ', value: onTimeRecords, tone: 'onTime' as const },
     { icon: AlertTriangle, label: 'Đi muộn', value: lateRecords.length, tone: 'amber' as const },
-    { icon: XCircle, label: 'Nghỉ', value: absentRecords.length, tone: 'red' as const },
+    { icon: XCircle, label: 'Nghỉ', value: absentRecords.length, tone: 'absent' as const },
   ];
 
   const toneStyles = {
-    emerald: { card: 'bg-emerald-50 border-emerald-100', icon: 'text-emerald-600', value: 'text-emerald-800', label: 'text-emerald-700' },
+    onTime: { card: 'bg-red-50 border-red-100', icon: 'text-red-600', value: 'text-red-800', label: 'text-red-700' },
     amber: { card: 'bg-amber-50 border-amber-100', icon: 'text-amber-500', value: 'text-amber-800', label: 'text-amber-700' },
-    red: { card: 'bg-red-50 border-red-100', icon: 'text-red-500', value: 'text-red-800', label: 'text-red-700' },
+    absent: { card: 'bg-rose-50 border-rose-100', icon: 'text-rose-500', value: 'text-rose-800', label: 'text-rose-700' },
   };
 
   const stats = [
-    { icon: Briefcase, label: 'Ngày công', value: `${checkedInRecords.length}`, sub: `${uniqueEmployeeIds.length} nhân sự`, color: 'text-emerald-600' },
+    { icon: Briefcase, label: 'Ngày công', value: `${checkedInRecords.length}`, sub: `${uniqueEmployeeIds.length} nhân sự`, color: 'text-red-600' },
     { icon: Clock, label: 'Giờ làm', value: formatHours(totalMinutes), unit: 'h', sub: formatHoursLabel(totalMinutes), color: 'text-amber-600' },
     { icon: Timer, label: 'Đi muộn', value: `${lateRecords.length}`, sub: checkedInRecords.length ? `${Math.round((lateRecords.length / checkedInRecords.length) * 100)}% ca` : '0% ca', color: 'text-on-surface-variant' },
     { icon: UserMinus, label: 'Chưa check-in', value: `${absentRecords.length}`, sub: `${businessDays} ngày làm việc`, color: 'text-red-500' },
@@ -235,7 +235,7 @@ export default function Reports() {
           <h2 className="text-xl font-bold text-primary tracking-tight">Báo cáo</h2>
           <Link
             to={ROUTES.attendanceSheet}
-            className="rounded-xl bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white hover:bg-emerald-700"
+            className="rounded-xl bg-red-600 px-3 py-2 text-[12px] font-bold text-white hover:bg-red-700"
           >
             Bảng chấm công
           </Link>
@@ -314,7 +314,7 @@ export default function Reports() {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-primary">Bảng công</h3>
           <div className="flex gap-2.5 text-[9px] font-semibold text-on-surface-variant">
-            <span className="flex items-center gap-0.5"><span className="text-emerald-600">✓</span> Đúng giờ</span>
+            <span className="flex items-center gap-0.5"><span className="text-red-600">✓</span> Đúng giờ</span>
             <span className="flex items-center gap-0.5"><span className="text-amber-500">!</span> Muộn</span>
             <span className="flex items-center gap-0.5"><span className="text-red-500">✕</span> Nghỉ</span>
           </div>
@@ -390,7 +390,7 @@ export default function Reports() {
 
           {!loading && topEmployees.length === 0 && (
             <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-5 text-sm font-medium text-on-surface-variant">
-              Chưa có dữ liệu chấm công trong kỳ đã chọn.
+              No attendance data for the selected period.
             </div>
           )}
 
@@ -419,7 +419,7 @@ export default function Reports() {
       </section>
 
       <section className="pt-2 pb-10">
-        <button className="bg-emerald-600 text-white w-full px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+        <button className="bg-red-600 text-white w-full px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
           <Download size={18} />
           Xuất báo cáo
         </button>

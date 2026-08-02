@@ -199,7 +199,7 @@ export function setCurrentEmployee(employee: EmployeeIdentity) {
   };
 
   if (!nextEmployee.id || !nextEmployee.name) {
-    throw new Error('Vui lòng nhập mã nhân viên và tên.');
+    throw new Error('Please enter employee ID and name.');
   }
 
   currentEmployee.id = nextEmployee.id;
@@ -218,7 +218,7 @@ export async function getAllEmployees() {
 
 export async function getTodayAttendanceForAll() {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase
@@ -272,7 +272,7 @@ function getBrowserName() {
   if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
   if (/Chrome/i.test(ua)) return 'Chrome';
   if (/Firefox/i.test(ua)) return 'Firefox';
-  return 'trình duyệt';
+  return 'browser';
 }
 
 async function getBrowserLocationPermission(): Promise<BrowserLocationPermission> {
@@ -294,9 +294,9 @@ function isIosDevice() {
 
 function getSafariLocationHelp() {
   return [
-    'Bấm biểu tượng "aA" góc trái thanh địa chỉ → Cài đặt cho trang web → Vị trí → Cho phép.',
-    'Hoặc Cài đặt iPhone → Safari → Vị trí → Hỏi / Cho phép.',
-    'Bật Cài đặt → Quyền riêng tư → Dịch vụ định vị, rồi tải lại trang và bấm Thử lại.',
+    'Tap the "aA" icon on the left of the address bar → Website Settings → Location → Allow.',
+    'Or iPhone Settings → Safari → Location → Ask / Allow.',
+    'Enable Settings → Privacy → Location Services, then reload the page and tap Retry.',
   ].join(' ');
 }
 
@@ -305,17 +305,17 @@ function getPermissionDeniedMessage(permissionState: BrowserLocationPermission) 
 
   if (browser === 'Safari' || isIosDevice()) {
     if (permissionState === 'denied') {
-      return `Safari đang chặn GPS. ${getSafariLocationHelp()}`;
+      return `Safari is blocking GPS. ${getSafariLocationHelp()}`;
     }
 
-    return `Safari chưa cấp quyền GPS. Bấm Thử lại và chọn Cho phép khi được hỏi. Nếu không thấy hộp thoại: ${getSafariLocationHelp()}`;
+    return `Safari has not granted GPS permission. Tap Retry and choose Allow when prompted. If you do not see the dialog: ${getSafariLocationHelp()}`;
   }
 
   if (permissionState === 'denied') {
-    return `${browser} đang chặn GPS. Vào cài đặt trang web > Vị trí > Cho phép, hoặc nhập tay lat/lng trong Cài đặt → Dự án.`;
+    return `${browser} is blocking GPS. Open site settings > Location > Allow, or enter lat/lng manually in Settings → Projects.`;
   }
 
-  return `Hãy bấm Cho phép khi ${browser} hỏi quyền vị trí. Nếu không thấy hộp thoại, mở https://chamcong-psi.vercel.app trực tiếp trên trình duyệt (không qua app Zalo/Facebook).`;
+  return `Tap Allow when ${browser} asks for location permission. If you do not see the dialog, open https://chamcong-psi.vercel.app directly in the browser (not via Zalo/Facebook in-app browser).`;
 }
 
 const GEO_PERMISSION_DENIED = 1;
@@ -330,14 +330,14 @@ function getGeolocationMessage(error: GeolocationPositionError, permissionState:
   }
 
   if (code === GEO_POSITION_UNAVAILABLE) {
-    return 'Không xác định được GPS. Bật Dịch vụ định vị trên điện thoại, ra ngoài trời hoặc nhập tay lat/lng trong Cài đặt → Dự án.';
+    return 'Could not determine GPS. Enable Location Services on your phone, go outdoors, or enter lat/lng manually in Settings → Projects.';
   }
 
   if (code === GEO_TIMEOUT) {
-    return 'Lấy GPS quá lâu. Thử lại ở nơi thoáng, hoặc nhập tay tọa độ trong Cài đặt → Dự án.';
+    return 'GPS timed out. Try again in an open area, or enter coordinates manually in Settings → Projects.';
   }
 
-  return `Không lấy được GPS trên ${getBrowserName()}. Kiểm tra quyền vị trí hoặc nhập tay lat/lng.`;
+  return `Could not get GPS on ${getBrowserName()}. Check location permission or enter lat/lng manually.`;
 }
 
 function mapGeolocationPosition(position: GeolocationPosition): GeoPoint {
@@ -414,17 +414,17 @@ async function tryLocationStrategies(): Promise<GeoPoint> {
     }
   }
 
-  throw lastError ?? new Error('Không lấy được GPS.');
+  throw lastError ?? new Error('Could not get GPS.');
 }
 
 export async function getBrowserLocation(): Promise<GeoPoint> {
   if (!navigator.geolocation) {
-    throw new Error('Trình duyệt không hỗ trợ GPS.');
+    throw new Error('This browser does not support GPS.');
   }
 
   if (window.isSecureContext === false) {
     throw new Error(
-      'GPS chỉ hoạt động trên HTTPS. Điện thoại hãy mở https://chamcong-psi.vercel.app (không dùng http://192.168...). Hoặc nhập tay lat/lng trong Cài đặt → Dự án.',
+      'GPS only works over HTTPS. On mobile, open https://chamcong-psi.vercel.app (do not use http://192.168...). Or enter lat/lng manually in Settings → Projects.',
     );
   }
 
@@ -438,14 +438,14 @@ export async function getBrowserLocation(): Promise<GeoPoint> {
   }
 }
 
-export async function getTodayAttendance() {
+export async function getTodayAttendanceSessions() {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const employee = await ensureCurrentEmployeeResolved();
   if (!employee) {
-    throw new Error('Vui lòng nhập mã nhân viên trước khi chấm công.');
+    throw new Error('Please enter an employee ID before checking in.');
   }
 
   const { data, error } = await supabase
@@ -453,15 +453,32 @@ export async function getTodayAttendance() {
     .select('*')
     .eq('employee_id', employee.id)
     .eq('work_date', getTodayKey())
-    .maybeSingle();
+    .order('check_in_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  return (data ?? []) as AttendanceDbRecord[];
+}
+
+/** Phiên đang làm (đã check-in, chưa check-out). Không có thì null. */
+export async function getActiveTodayAttendance() {
+  const sessions = await getTodayAttendanceSessions();
+  return sessions.find((row) => Boolean(row.check_in_at) && !row.check_out_at) ?? null;
+}
+
+/**
+ * Bản ghi hôm nay để hiển thị:
+ * ưu tiên phiên đang làm, không có thì phiên gần nhất.
+ */
+export async function getTodayAttendance() {
+  const sessions = await getTodayAttendanceSessions();
+  const active = sessions.find((row) => Boolean(row.check_in_at) && !row.check_out_at);
+  return active ?? sessions[0] ?? null;
 }
 
 export async function getAttendanceRecordsInRange(startDate: string, endDate: string) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase
@@ -482,7 +499,7 @@ export async function getEmployeeAttendanceRecords(
   endDate: string,
 ) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase
@@ -502,43 +519,45 @@ export async function checkIn(
   product: CheckInProductSelection,
 ) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const employee = await ensureCurrentEmployeeResolved();
   if (!employee) {
-    throw new Error('Không xác định được nhân viên. Mở link với ?name=...');
+    throw new Error('Could not identify employee. Open the link with ?name=...');
   }
 
   if (!product.projectId) {
-    throw new Error('Vui lòng chọn dự án trước khi check-in.');
+    throw new Error('Please select a project before checking in.');
+  }
+
+  const active = await getActiveTodayAttendance();
+  if (active) {
+    throw new Error('You are already checked in to a project. Check out before selecting another.');
   }
 
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('attendance_records')
-    .upsert(
-      {
-        employee_id: employee.id,
-        employee_name: employee.name,
-        work_date: getTodayKey(),
-        ...getShiftConfig(),
-        product_id: null,
-        product_location_id: null,
-        project_id: product.projectId,
-        product_name: product.projectName,
-        location_name: product.locationName,
-        check_in_at: now,
-        check_in_lat: location?.lat ?? null,
-        check_in_lng: location?.lng ?? null,
-        last_lat: location?.lat ?? null,
-        last_lng: location?.lng ?? null,
-        location_accuracy_m: location?.accuracy ?? null,
-        location_captured_at: location?.capturedAt ?? null,
-        status: 'working',
-      },
-      { onConflict: 'employee_id,work_date' },
-    )
+    .insert({
+      employee_id: employee.id,
+      employee_name: employee.name,
+      work_date: getTodayKey(),
+      ...getShiftConfig(),
+      product_id: null,
+      product_location_id: null,
+      project_id: product.projectId,
+      product_name: product.projectName,
+      location_name: product.locationName,
+      check_in_at: now,
+      check_in_lat: location?.lat ?? null,
+      check_in_lng: location?.lng ?? null,
+      last_lat: location?.lat ?? null,
+      last_lng: location?.lng ?? null,
+      location_accuracy_m: location?.accuracy ?? null,
+      location_captured_at: location?.capturedAt ?? null,
+      status: 'working',
+    })
     .select('*')
     .single();
 
@@ -551,7 +570,7 @@ export async function checkOut(
   location: GeoPoint | null,
 ) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase
@@ -634,7 +653,7 @@ export function startBackgroundLocationTracking(
 
 export async function saveLocation(record: AttendanceDbRecord, location: GeoPoint) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const { data, error } = await supabase
@@ -655,15 +674,15 @@ export async function saveLocation(record: AttendanceDbRecord, location: GeoPoin
 
 export async function saveTodayLocation(location: GeoPoint) {
   if (!supabase) {
-    throw new Error('Chưa cấu hình Supabase.');
+    throw new Error('Supabase is not configured.');
   }
 
   const employee = await ensureCurrentEmployeeResolved();
   if (!employee) {
-    throw new Error('Không xác định được nhân viên. Mở link với ?name=...');
+    throw new Error('Could not identify employee. Open the link with ?name=...');
   }
 
-  const existing = await getTodayAttendance();
+  const existing = await getActiveTodayAttendance() ?? await getTodayAttendance();
   if (existing) {
     return saveLocation(existing, location);
   }

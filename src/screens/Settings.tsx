@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+﻿import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   Bell,
   History,
@@ -87,17 +87,17 @@ export default function Settings() {
     setFormError(null);
 
     if (!draft.shiftName.trim()) {
-      setFormError('Vui lòng nhập tên ca làm việc.');
+      setFormError('Please enter a shift name.');
       return;
     }
 
     if (!draft.scheduledStart || !draft.scheduledEnd) {
-      setFormError('Vui lòng nhập giờ bắt đầu và kết thúc ca.');
+      setFormError('Please enter shift start and end times.');
       return;
     }
 
     if (draft.scheduledStart >= draft.scheduledEnd) {
-      setFormError('Giờ kết thúc ca phải sau giờ bắt đầu.');
+      setFormError('Shift end time must be after start time.');
       return;
     }
 
@@ -115,7 +115,7 @@ export default function Settings() {
       refreshSettings();
       setActivePanel(null);
     } catch {
-      setFormError('Không lưu được cài đặt.');
+      setFormError('Could not save settings.');
     } finally {
       setSaving(false);
     }
@@ -148,11 +148,11 @@ export default function Settings() {
       applyGpsToSettings(point, saveImmediately);
       setLocationMessage(
         saveImmediately
-          ? `Đã lưu vị trí: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`
-          : `Đã điền vị trí: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`,
+          ? `Location saved: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`
+          : `Location filled in: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Không lấy được vị trí GPS.';
+      const message = err instanceof Error ? err.message : 'Could not get GPS location.';
       setFormError(message);
       setLocationMessage(null);
     } finally {
@@ -161,7 +161,7 @@ export default function Settings() {
   };
 
   const handleLogout = () => {
-    if (confirm('Bạn có chắc muốn đăng xuất?')) {
+    if (confirm('Are you sure you want to sign out?')) {
       clearCurrentEmployee();
       setTimeout(() => window.location.reload(), 500);
     }
@@ -234,7 +234,7 @@ export default function Settings() {
 
       <div className="bg-white shadow-xl shadow-primary-container/5 rounded-3xl p-5 border border-surface-container-highest flex flex-col gap-4">
         <div className="flex items-start gap-4">
-          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
             <MapPin size={22} />
           </div>
           <div className="flex-1 min-w-0">
@@ -242,7 +242,7 @@ export default function Settings() {
             <p className="text-sm font-bold text-primary mt-1 truncate">
               {settings.officeLat && settings.officeLng
                 ? `${settings.officeLat}, ${settings.officeLng}`
-                : 'Chưa có vị trí'}
+                : 'No location yet'}
             </p>
             <p className="text-[11px] text-on-surface-variant mt-0.5">
               {settings.officeName || 'Địa điểm văn phòng'} · bán kính {settings.officeRadiusM}m
@@ -253,7 +253,7 @@ export default function Settings() {
           type="button"
           onClick={() => handleUseCurrentLocation(true)}
           disabled={locating}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 active:scale-[0.99] transition-all"
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-60 active:scale-[0.99] transition-all"
         >
           {locating ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
           Lấy vị trí
@@ -263,7 +263,7 @@ export default function Settings() {
             className={`text-[12px] font-medium rounded-xl px-3 py-2 ${
               formError
                 ? 'text-red-700 bg-red-50 border border-red-100'
-                : 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+                : 'text-red-700 bg-red-50 border border-red-100'
             }`}
           >
             {formError || locationMessage}
@@ -298,7 +298,7 @@ export default function Settings() {
       </div>
 
       {productSuccessMessage && (
-        <p className="text-[12px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3">
+        <p className="text-[12px] font-medium text-red-700 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">
           {productSuccessMessage}
         </p>
       )}
@@ -351,7 +351,7 @@ export default function Settings() {
                         value={draft.shiftName}
                         onChange={(e) => setDraft({ ...draft, shiftName: e.target.value })}
                         className={inputClass}
-                        placeholder="Ca hành chính"
+                        placeholder="Standard shift"
                       />
                     </Field>
                     <div className="grid grid-cols-2 gap-3">
@@ -391,7 +391,7 @@ export default function Settings() {
                       type="button"
                       onClick={() => handleUseCurrentLocation(false)}
                       disabled={locating}
-                      className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60"
+                      className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-60"
                     >
                       {locating ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
                       Lấy vị trí
@@ -401,7 +401,7 @@ export default function Settings() {
                         value={draft.officeName}
                         onChange={(e) => setDraft({ ...draft, officeName: e.target.value })}
                         className={inputClass}
-                        placeholder="Văn phòng Jarviz"
+                        placeholder="Jarviz Office"
                       />
                     </Field>
                     <Field label="Vị trí (tự điền khi bấm Lấy vị trí)">
@@ -500,7 +500,7 @@ export default function Settings() {
                     type="button"
                     onClick={handleSave}
                     disabled={saving}
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 mt-2"
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-red-600 text-white rounded-2xl text-sm font-bold hover:bg-red-700 disabled:opacity-60 mt-2"
                   >
                     {saving ? <Loader2 size={18} className="animate-spin" /> : null}
                     Lưu cài đặt
@@ -516,7 +516,7 @@ export default function Settings() {
 }
 
 const inputClass =
-  'w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:outline-none';
+  'w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-red-500/20 focus:outline-none';
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -553,7 +553,7 @@ function ToggleRow({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${
-          checked ? 'bg-emerald-600' : 'bg-outline/30'
+          checked ? 'bg-red-600' : 'bg-outline/30'
         }`}
       >
         <span

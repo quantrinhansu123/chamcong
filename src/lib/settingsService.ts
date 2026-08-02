@@ -14,10 +14,10 @@ export interface AppSettings {
 const SETTINGS_STORAGE_KEY = 'jarviz_app_settings';
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  shiftName: 'Ca hành chính',
+  shiftName: 'Standard shift',
   scheduledStart: '08:00',
   scheduledEnd: '17:30',
-  officeName: 'Văn phòng Jarviz',
+  officeName: 'Jarviz Office',
   officeLat: '',
   officeLng: '',
   officeRadiusM: 200,
@@ -59,7 +59,7 @@ export function formatLocationSummary(settings: AppSettings = getAppSettings()) 
   if (settings.officeLat && settings.officeLng) {
     return `${settings.officeName} (${settings.officeRadiusM}m)`;
   }
-  return settings.officeName || 'Chưa cấu hình GPS văn phòng';
+  return settings.officeName || 'Office GPS not configured';
 }
 
 export interface OfficeLocation {
@@ -115,12 +115,12 @@ export function compareWithOffice(
 export function assertWithinOfficeRadius(point: { lat: number; lng: number }) {
   const result = compareWithOffice(point);
   if (!result.configured || !result.office) {
-    throw new Error('Chưa cấu hình vị trí chấm công. Vào Cài đặt → Lấy vị trí.');
+    throw new Error('Check-in location is not configured. Go to Settings → Get location.');
   }
 
   if (!result.withinRadius) {
     throw new Error(
-      `Bạn đang cách ${result.office.name} ${Math.round(result.distanceM)}m, vượt quá bán kính ${result.office.radiusM}m.`,
+      `You are ${Math.round(result.distanceM)}m from ${result.office.name}, outside the ${result.office.radiusM}m radius.`,
     );
   }
 
@@ -150,12 +150,12 @@ export function assertWithinLocation(
 ) {
   const result = compareWithLocation(point, location);
   if (!result.configured || !result.office) {
-    throw new Error('Chưa cấu hình vị trí cho dự án này. Vào Cài đặt → Dự án → Lưu tọa độ.');
+    throw new Error('Location is not configured for this project. Go to Settings → Projects → Save coordinates.');
   }
 
   if (!result.withinRadius) {
     throw new Error(
-      `Bạn đang cách ${result.office.name} ${Math.round(result.distanceM)}m, vượt quá bán kính ${result.office.radiusM}m.`,
+      `You are ${Math.round(result.distanceM)}m from ${result.office.name}, outside the ${result.office.radiusM}m radius.`,
     );
   }
 

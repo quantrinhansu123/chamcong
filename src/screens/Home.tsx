@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -10,10 +10,12 @@ import {
   MoreHorizontal,
   AlertCircle,
   Package,
+  Route,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { AttendanceDbRecord, GeoPoint } from '../types';
 import ProductCheckInPicker from '../components/ProductCheckInPicker';
+import TodayAttendanceCards from '../components/TodayAttendanceCards';
 import { useProductCheckIn } from '../hooks/useProductCheckIn';
 import UserAvatar from '../components/UserAvatar';
 import { getSupabaseConfigError, getSupabaseRequestErrorMessage, isSupabaseConfigured } from '../lib/supabase';
@@ -27,8 +29,6 @@ import {
   saveTodayLocation,
   startBackgroundLocationTracking,
 } from '../lib/attendanceService';
-import { getTodayOverviewForProjects } from '../lib/overviewService';
-import { isAnonymousUserId, isValidQueryUserId, resolveQueryUserId } from '../lib/staffService';
 import { compareWithLocation } from '../lib/settingsService';
 import { ROUTES } from '../types';
 
@@ -57,7 +57,7 @@ function getErrorMessage(err: unknown, fallback: string) {
   if (!(err instanceof Error)) return fallback;
 
   if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-    return 'Không kết nối được Supabase. Hãy kiểm tra mạng hoặc cấu hình Supabase rồi thử lại.';
+    return 'Could not connect to Supabase. Check your network or Supabase configuration and try again.';
   }
 
   return err.message || fallback;
@@ -74,24 +74,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locationCompareText, setLocationCompareText] = useState<string | null>(null);
-  const [overview, setOverview] = useState({
-    total: 0,
-    checkedIn: 0,
-    notCheckedIn: 0,
-    absent: 0,
-    projectNames: [] as string[],
-    projectCount: 0,
-    siteVisits: [] as Array<{
-      id: string;
-      projectName: string;
-      locationName: string | null;
-      employeeName: string;
-      checkInAt: string | null;
-      checkOutAt: string | null;
-      status: 'working' | 'checked_out';
-    }>,
-    loading: true,
-  });
   const {
     products,
     loading: productsLoading,
@@ -103,6 +85,7 @@ export default function Home() {
     canCheckIn,
     loadError: projectsLoadError,
     checkedOutToday,
+    todaySessions,
     refreshProjects,
   } = useProductCheckIn(employee);
 
@@ -133,98 +116,9 @@ export default function Home() {
     }
 
     refreshTodayRecord()
-      .catch((err) => setError(getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'Không tải được dữ liệu chấm công.'))))
+      .catch((err) => setError(getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'Could not load attendance data.'))))
       .finally(() => setLoading(false));
   }, [refreshTodayRecord, employee?.id, employeeResolving]);
-
-  const loadOverview = useCallback(async () => {
-    if (getSupabaseConfigError()) {
-      setOverview((prev) => ({ ...prev, loading: false }));
-      return;
-    }
-
-    if (employeeResolving) {
-      return;
-    }
-
-    const userId = employee?.id?.trim() ?? '';
-    const userName = employee?.name?.trim() ?? '';
-    if (!userId && !userName) {
-      setOverview({
-        total: 0,
-        checkedIn: 0,
-        notCheckedIn: 0,
-        absent: 0,
-        projectNames: [],
-        projectCount: 0,
-        siteVisits: [],
-        loading: false,
-      });
-      return;
-    }
-
-    if (isAnonymousUserId(userId) && !userName) {
-      setOverview({
-        total: 0,
-        checkedIn: 0,
-        notCheckedIn: 0,
-        absent: 0,
-        projectNames: [],
-        projectCount: 0,
-        siteVisits: [],
-        loading: false,
-      });
-      return;
-    }
-
-    setOverview((prev) => ({ ...prev, loading: true }));
-    try {
-      const resolvedId = isValidQueryUserId(userId)
-        ? userId
-        : await resolveQueryUserId({ id: userId, name: userName });
-
-      if (!resolvedId) {
-        setOverview({
-          total: 0,
-          checkedIn: 0,
-          notCheckedIn: 0,
-          absent: 0,
-          projectNames: [],
-        projectCount: 0,
-        siteVisits: [],
-          loading: false,
-        });
-        return;
-      }
-
-      const data = await getTodayOverviewForProjects(resolvedId, userName);
-      setOverview({
-        total: data.total ?? 0,
-        checkedIn: data.checkedIn ?? 0,
-        notCheckedIn: data.notCheckedIn ?? 0,
-        absent: data.absent ?? 0,
-        projectNames: data.projectNames ?? [],
-        projectCount: data.projectCount ?? 0,
-        siteVisits: data.siteVisits ?? [],
-        loading: false,
-      });
-    } catch {
-      setOverview({
-        total: 0,
-        checkedIn: 0,
-        notCheckedIn: 0,
-        absent: 0,
-        projectNames: [],
-        projectCount: 0,
-        siteVisits: [],
-        loading: false,
-      });
-    }
-  }, [employee?.id, employee?.name, employeeResolving]);
-
-  useEffect(() => {
-    loadOverview();
-  }, [loadOverview]);
 
   const isActiveCheckIn = Boolean(record?.check_in_at && !record?.check_out_at);
 
@@ -235,7 +129,7 @@ export default function Home() {
 
   const locationText = useMemo(() => {
     if (isActiveCheckIn && activeSiteName) return activeSiteName;
-    if (!record?.last_lat || !record?.last_lng) return 'Chưa ghi nhận GPS';
+    if (!record?.last_lat || !record?.last_lng) return 'No GPS recorded';
     return `${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`;
   }, [isActiveCheckIn, activeSiteName, record?.last_lat, record?.last_lng]);
 
@@ -248,7 +142,7 @@ export default function Home() {
       if (record?.last_lat && record?.last_lng) {
         parts.push(`${Number(record.last_lat).toFixed(6)}, ${Number(record.last_lng).toFixed(6)}`);
       } else if (!record?.location_name) {
-        parts.push('Chưa ghi nhận GPS — bấm để cập nhật');
+        parts.push('No GPS recorded — tap to update');
       }
       if (record?.check_in_at) {
         parts.push(`Check-in ${formatTime(record.check_in_at)}`);
@@ -258,9 +152,9 @@ export default function Home() {
 
     if (locationCompareText) return locationCompareText;
     if (officeLocation) {
-      return `So sánh với ${officeLocation.name} (bán kính ${officeLocation.radiusM}m)`;
+      return `Compared with ${officeLocation.name} (radius ${officeLocation.radiusM}m)`;
     }
-    return 'Cấu hình vị trí trong Cài đặt trước khi chấm công';
+    return 'Configure location in Settings before checking in';
   }, [
     isActiveCheckIn,
     activeSiteName,
@@ -276,15 +170,15 @@ export default function Home() {
   const formatLocationCompare = (point: GeoPoint) => {
     const result = compareWithLocation(point, officeLocation);
     if (!result.configured || !result.office) {
-      return 'Chưa cấu hình vị trí chấm công trong Cài đặt.';
+      return 'Check-in location is not configured in Settings.';
     }
 
     const distance = Math.round(result.distanceM);
     if (result.withinRadius) {
-      return `Trong phạm vi ${result.office.name} (${distance}m / ${result.office.radiusM}m)`;
+      return `Within range of ${result.office.name} (${distance}m / ${result.office.radiusM}m)`;
     }
 
-    return `Ngoài phạm vi ${result.office.name} (${distance}m, cho phép ${result.office.radiusM}m)`;
+    return `Outside range of ${result.office.name} (${distance}m, allowed ${result.office.radiusM}m)`;
   };
 
   const runAction = async (
@@ -304,13 +198,13 @@ export default function Home() {
       setMessage(
         result.message ??
           (action === 'check-in'
-            ? 'Đã lưu check-in vào Supabase.'
+            ? 'Check-in saved to Supabase.'
             : action === 'check-out'
-              ? 'Đã lưu check-out vào Supabase.'
-              : 'Đã lưu GPS vào Supabase.'),
+              ? 'Check-out saved to Supabase.'
+              : 'GPS saved to Supabase.'),
       );
     } catch (err) {
-      const errorMessage = getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'Có lỗi khi lưu dữ liệu.'));
+      const errorMessage = getSupabaseRequestErrorMessage(err, getErrorMessage(err, 'An error occurred while saving data.'));
       setError(errorMessage);
       if (action === 'location') {
         setLocationError(errorMessage);
@@ -321,9 +215,9 @@ export default function Home() {
   };
 
   const handleCheckIn = () => {
-    if (record?.check_in_at) return;
+    if (record?.check_in_at && !record.check_out_at) return;
     if (!productSelection) {
-      setError('Vui lòng chọn dự án trước khi check-in.');
+      setError('Please select a project before checking in.');
       return;
     }
     runAction('check-in', async () => {
@@ -332,18 +226,17 @@ export default function Home() {
         setLocationCompareText(formatLocationCompare(location));
         setLocationError(null);
       } else {
-        setLocationError('GPS đang lấy nền — sẽ cập nhật khi có tín hiệu.');
+        setLocationError('GPS is fetching in the background — will update when a signal is available.');
       }
       const updatedRecord = await checkIn(location, productSelection);
       await refreshTodayRecord();
       refreshProjects();
-      loadOverview();
       return {
         record: updatedRecord,
-        locationError: location ? null : 'GPS đang chạy nền. Sẽ tự cập nhật khi lấy được vị trí.',
+        locationError: location ? null : 'GPS is running in the background. It will update automatically when a location is available.',
         message: location
-          ? `Check-in thành công. ${formatLocationCompare(location)}`
-          : 'Check-in thành công. GPS đang chạy nền.',
+          ? `Check-in successful. ${formatLocationCompare(location)}`
+          : 'Check-in successful. GPS is running in the background.',
       };
     });
   };
@@ -355,13 +248,12 @@ export default function Home() {
       const updatedRecord = await checkOut(record, location);
       await refreshTodayRecord();
       refreshProjects();
-      loadOverview();
       return {
         record: updatedRecord,
-        locationError: location ? null : 'GPS đang chạy nền. Sẽ tự cập nhật khi lấy được vị trí.',
+        locationError: location ? null : 'GPS is running in the background. It will update automatically when a location is available.',
         message: location
-          ? `Check-out thành công. ${formatLocationCompare(location)}`
-          : 'Check-out thành công. GPS đang chạy nền.',
+          ? `Check-out successful. You can select another project to check in again. ${formatLocationCompare(location)}`
+          : 'Check-out successful. You can select another project to check in again.',
       };
     });
   };
@@ -393,8 +285,8 @@ export default function Home() {
           const distance = Math.round(result.distanceM);
           setLocationCompareText(
             result.withinRadius
-              ? `Trong phạm vi ${result.office.name} (${distance}m / ${result.office.radiusM}m)`
-              : `Ngoài phạm vi ${result.office.name} (${distance}m, cho phép ${result.office.radiusM}m)`,
+              ? `Within range of ${result.office.name} (${distance}m / ${result.office.radiusM}m)`
+              : `Outside range of ${result.office.name} (${distance}m, allowed ${result.office.radiusM}m)`,
           );
         }
         setLocationError(null);
@@ -410,7 +302,7 @@ export default function Home() {
     loading
     || productsLoading
     || Boolean(busyAction)
-    || Boolean(record?.check_in_at)
+    || isActiveCheckIn
     || !isSupabaseConfigured
     || !canCheckIn;
   const checkOutDisabled = loading || Boolean(busyAction) || !record?.check_in_at || Boolean(record?.check_out_at) || !isSupabaseConfigured;
@@ -452,19 +344,19 @@ export default function Home() {
           <div className="text-sm font-medium text-outline">{formatDate(now)}</div>
           {(record?.product_name || record?.location_name) && (
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-on-surface-variant mt-1">
-              <Package size={12} className="text-emerald-600" />
+              <Package size={12} className="text-red-600" />
               <span>{record.product_name}{record.location_name ? ` · ${record.location_name}` : ''}</span>
             </div>
           )}
         </div>
 
-        {checkedOutToday && (
+        {checkedOutToday && !isActiveCheckIn && products.length > 0 && (
           <p className="text-[11px] font-medium text-on-surface-variant bg-surface-container-low rounded-xl px-3 py-2">
-            Bạn đã check-out hôm nay. Không còn trong danh sách đang làm việc.
+            Checked out. Select another remaining project to check in again.
           </p>
         )}
 
-        {!record?.check_in_at && !checkedOutToday && (
+        {!isActiveCheckIn && (
           <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-3 space-y-2">
             <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Dự án chấm công</p>
             <ProductCheckInPicker
@@ -474,8 +366,13 @@ export default function Home() {
               selectedProductId={selectedProductId}
               onProductChange={handleProductChange}
               compact
+              emptyMessage={
+                todaySessions.some((s) => s.check_in_at && s.check_out_at)
+                  ? 'You have already checked in to all assigned projects today.'
+                  : undefined
+              }
             />
-            {officeLocation ? (
+            {officeLocation && products.length > 0 ? (
               <p className="text-[10px] text-on-surface-variant">
                 Vị trí chấm công: <span className="font-bold text-primary">{officeLocation.name}</span>
                 {' '}· bán kính {officeLocation.radiusM}m
@@ -483,21 +380,25 @@ export default function Home() {
                 {officeLocation.lat.toFixed(6)}, {officeLocation.lng.toFixed(6)}
                 )
               </p>
-            ) : (
-              <p className="text-[10px] text-amber-700">
-                Chưa cấu hình vị trí.{' '}
-                <Link to={ROUTES.settings} className="font-bold underline">
-                  Vào Cài đặt → Dự án → Lấy vị trí
-                </Link>
-              </p>
-            )}
+            ) : null}
+          </div>
+        )}
+
+        {isActiveCheckIn && (
+          <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2">
+            <p className="text-[11px] font-bold text-red-800">
+              Đang làm: {record?.product_name || '—'}
+            </p>
+            <p className="text-[10px] text-red-700 mt-0.5">
+              Check-out xong mới chọn được dự án khác.
+            </p>
           </div>
         )}
 
         {(message || error) && (
           <div
             className={`rounded-xl px-4 py-3 text-[12px] font-bold flex items-center gap-2 ${
-              error ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+              error ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-red-50 text-red-700 border border-red-100'
             }`}
           >
             {error && <AlertCircle size={16} className="shrink-0" />}
@@ -523,6 +424,25 @@ export default function Home() {
             CHECK-OUT
           </button>
         </div>
+
+        <TodayAttendanceCards
+          sessions={todaySessions.filter((s) => Boolean(s.check_in_at))}
+          compact
+        />
+
+        <Link
+          to={ROUTES.attendanceSheet}
+          className="flex items-center gap-3 rounded-xl border border-outline-variant/15 bg-white px-3 py-3 active:scale-[0.99] transition-all"
+        >
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
+            <Route size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-bold text-on-surface">Xem toàn bộ bảng công</p>
+            <p className="text-[11px] text-on-surface-variant">Theo dõi lộ trình chấm công theo ngày</p>
+          </div>
+          <ChevronRight size={18} className="text-outline shrink-0" />
+        </Link>
       </div>
 
       <button
@@ -551,149 +471,28 @@ export default function Home() {
             </p>
             <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${
               isActiveCheckIn
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                ? 'bg-red-50 border-red-200 text-red-700'
                 : 'bg-surface-container-low border-outline-variant/30 text-outline'
             }`}>
               {isActiveCheckIn ? 'Đang làm' : 'GPS'}
             </span>
           </div>
           <h3 className={`font-bold text-lg leading-tight mb-1 ${locationError ? 'text-red-700' : 'text-on-surface truncate'}`}>
-            {locationError ? 'Chưa lấy được GPS' : locationText}
+            {locationError ? 'Could not get GPS' : locationText}
           </h3>
           <p className={`text-[12px] leading-relaxed ${locationError ? 'text-red-700' : 'text-on-surface-variant'}`}>
             {locationError || locationSubtext}
           </p>
           {!locationError && record?.location_accuracy_m && (
             <p className="text-[11px] text-on-surface-variant mt-1">
-              Độ chính xác khoảng {Math.round(Number(record.location_accuracy_m))}m
+              Accuracy about {Math.round(Number(record.location_accuracy_m))}m
             </p>
           )}
           {locationError && (
-            <p className="text-[12px] font-extrabold text-primary-container mt-2">Thử lại</p>
+            <p className="text-[12px] font-extrabold text-primary-container mt-2">Retry</p>
           )}
         </div>
       </button>
-
-      <div className="glass-card p-5 flex flex-col gap-4 mb-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-sm font-bold text-on-surface">Tổng quan hôm nay</h3>
-            <p className="text-[11px] text-on-surface-variant mt-0.5">
-              {overview.loading || employeeResolving
-                ? 'Đang tải dự án...'
-                : (overview.projectNames ?? []).length > 0
-                  ? (overview.projectNames ?? []).join(', ')
-                  : 'Chưa có dự án assignees khớp tên của bạn'}
-            </p>
-          </div>
-          <Link to="/bao-cao" className="text-[12px] font-bold text-on-surface flex items-center gap-1 hover:opacity-80 transition-opacity">
-            Xem báo cáo <ChevronRight size={14} />
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="relative w-24 h-24 shrink-0 flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="40" fill="none" stroke="var(--color-surface-container-low)" strokeWidth="12" />
-              <circle
-                cx="50"
-                cy="50"
-                r="40"
-                fill="none"
-                stroke="var(--color-primary-container)"
-                strokeWidth="12"
-                strokeDasharray="251.2"
-                strokeDashoffset={
-                  overview.projectCount > 0
-                    ? 251.2 * (1 - overview.checkedIn / Math.max(overview.total, 1))
-                    : 251.2
-                }
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-lg font-bold text-on-surface">
-                {overview.loading ? '—' : overview.projectCount}
-              </span>
-              <span className="text-[10px] font-bold text-outline uppercase">Dự án</span>
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-primary-container" />
-                <span className="text-[12px] text-on-surface-variant font-medium">Đã check-in</span>
-              </div>
-              <span className="text-[12px] font-bold">
-                {overview.loading ? '—' : overview.checkedIn}
-                {!overview.loading && overview.total > 0 && (
-                  <span className="text-outline font-normal text-[10px]">
-                    {' '}({Math.round((overview.checkedIn / overview.total) * 100)}%)
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-secondary-container" />
-                <span className="text-[12px] text-on-surface-variant font-medium">Chưa check-in</span>
-              </div>
-              <span className="text-[12px] font-bold">
-                {overview.loading ? '—' : overview.notCheckedIn}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-[12px] text-on-surface-variant font-medium">Ghi nhận vắng</span>
-              </div>
-              <span className="text-[12px] font-bold">{overview.loading ? '—' : overview.absent}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-outline-variant/15 pt-4">
-          <p className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-3">
-            Địa điểm đã check-in / check-out
-          </p>
-          {overview.loading || employeeResolving ? (
-            <p className="text-[12px] text-on-surface-variant">Đang tải...</p>
-          ) : (overview.siteVisits ?? []).length === 0 ? (
-            <p className="text-[12px] text-on-surface-variant">Chưa có ai check-in hôm nay.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {(overview.siteVisits ?? []).map((visit) => (
-                <div
-                  key={visit.id}
-                  className="rounded-xl border border-outline-variant/15 bg-surface-container-low/60 px-3 py-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-bold text-on-surface truncate">{visit.projectName}</p>
-                      <p className="text-[11px] text-on-surface-variant truncate">
-                        {visit.employeeName}
-                        {visit.locationName ? ` · ${visit.locationName}` : ''}
-                      </p>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                      visit.status === 'working'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                        : 'bg-surface-container text-outline border border-outline-variant/20'
-                    }`}>
-                      {visit.status === 'working' ? 'Đang làm' : 'Đã out'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-on-surface-variant mt-1.5">
-                    In {formatTime(visit.checkInAt)}
-                    {visit.checkOutAt ? ` · Out ${formatTime(visit.checkOutAt)}` : ' · Chưa check-out'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
     </motion.div>
   );
 }

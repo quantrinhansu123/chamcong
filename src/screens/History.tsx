@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Download,
@@ -97,7 +97,7 @@ export default function History() {
 
     getEmployeeAttendanceRecords(employee.id, toDateKey(start), toDateKey(end))
       .then((rows) => setRecords(rows.map((row) => mapRecord(row, now))))
-      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Không tải được lịch sử chấm công.')))
+      .catch((err) => setError(getSupabaseRequestErrorMessage(err, 'Could not load attendance history.')))
       .finally(() => setLoading(false));
   }, [employee.id, start, end, now]);
 
@@ -181,7 +181,7 @@ export default function History() {
 
         {!loading && !error && records.length === 0 && (
           <div className="bg-white rounded-2xl p-8 text-center text-sm font-medium text-on-surface-variant border border-outline-variant/10">
-            Chưa có dữ liệu chấm công trong tháng này.
+            No attendance data for this month.
           </div>
         )}
 
@@ -202,7 +202,7 @@ export default function History() {
                 <div
                   className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1.5 ${
                     record.status === 'on-time'
-                      ? 'bg-emerald-50 text-emerald-700'
+                      ? 'bg-red-50 text-red-700'
                       : record.status === 'late'
                         ? 'bg-amber-50 text-amber-700'
                         : 'bg-red-50 text-red-700'
@@ -222,7 +222,7 @@ export default function History() {
               <div className="flex justify-around items-center px-2 py-1">
                 {record.status === 'absent' ? (
                   <span className="text-[12px] font-medium text-on-surface-variant italic py-2">
-                    Không có dữ liệu chấm công
+                    No attendance data
                   </span>
                 ) : (
                   <>

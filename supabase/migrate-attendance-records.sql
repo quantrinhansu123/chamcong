@@ -30,9 +30,15 @@ create table if not exists public.attendance_records (
   status text not null default 'not_checked_in'
     check (status in ('not_checked_in', 'working', 'checked_out')),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint attendance_records_employee_day_key unique (employee_id, work_date)
+  updated_at timestamptz not null default now()
 );
+
+alter table public.attendance_records
+  drop constraint if exists attendance_records_employee_day_key;
+
+create unique index if not exists attendance_records_one_active_per_day_idx
+  on public.attendance_records (employee_id, work_date)
+  where check_in_at is not null and check_out_at is null;
 
 create index if not exists attendance_records_work_date_idx
   on public.attendance_records (work_date desc);

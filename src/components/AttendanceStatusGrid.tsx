@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import type { AttendanceDbRecord } from '../types';
 import type { EmployeeRecord } from '../lib/attendanceService';
@@ -42,7 +42,7 @@ function getCellStatus(record?: AttendanceDbRecord): CellStatus {
 
 function StatusIcon({ status }: { status: CellStatus }) {
   if (status === 'on-time') {
-    return <CheckCircle2 size={14} className="text-emerald-600 fill-emerald-100" />;
+    return <CheckCircle2 size={14} className="text-red-600 fill-red-100" />;
   }
   if (status === 'late') {
     return <AlertTriangle size={14} className="text-amber-500 fill-amber-100" />;
@@ -178,7 +178,7 @@ export default function AttendanceStatusGrid({
                   {row.weekProjects.length > 0 ? (
                     <div className="flex flex-col gap-0.5">
                       {row.weekProjects.map((name) => (
-                        <p key={name} className="text-[8px] font-semibold text-emerald-700 leading-tight line-clamp-2" title={name}>
+                        <p key={name} className="text-[8px] font-semibold text-red-700 leading-tight line-clamp-2" title={name}>
                           {name}
                         </p>
                       ))}
@@ -228,7 +228,7 @@ export default function AttendanceStatusGrid({
                 return (
                   <td key={day} className="px-0.5 py-2 text-center align-top">
                     <div className="flex flex-col items-center gap-0.5 text-[8px] font-bold leading-none">
-                      {onTime > 0 && <span className="text-emerald-600">{onTime}✓</span>}
+                      {onTime > 0 && <span className="text-red-600">{onTime}✓</span>}
                       {late > 0 && <span className="text-amber-500">{late}!</span>}
                       {absent > 0 && <span className="text-red-500">{absent}✕</span>}
                     </div>

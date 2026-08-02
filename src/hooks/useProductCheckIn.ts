@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { EmployeeIdentity } from '../lib/attendanceService';
-import { getTodayAttendance } from '../lib/attendanceService';
+import { getActiveTodayAttendance, getTodayAttendanceSessions } from '../lib/attendanceService';
 import { getProjectsForUser } from '../lib/projectService';
 import { isAnonymousUserId, isValidQueryUserId, resolveQueryUserId } from '../lib/staffService';
 import {
@@ -11,12 +11,21 @@ import { getOfficeLocation, type OfficeLocation } from '../lib/settingsService';
 import { getSupabaseConfigError } from '../lib/supabase';
 import type { AttendanceDbRecord, CheckInProductSelection, ProductWithLocations } from '../types';
 
+function completedProjectIds(sessions: AttendanceDbRecord[]) {
+  return new Set(
+    sessions
+      .filter((row) => Boolean(row.project_id && row.check_in_at && row.check_out_at))
+      .map((row) => row.project_id as string),
+  );
+}
+
 export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: boolean }) | null) {
   const employeeId = employee?.id?.trim() ?? '';
   const employeeName = employee?.name?.trim() ?? '';
   const employeeResolving = Boolean(employee?.resolving);
   const [projects, setProjects] = useState<ProductWithLocations[]>([]);
   const [todayRecord, setTodayRecord] = useState<AttendanceDbRecord | null>(null);
+  const [todaySessions, setTodaySessions] = useState<AttendanceDbRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [locationLoading, setLocationLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -36,7 +45,8 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
     if (!employeeId || !employeeName) {
       setProjects([]);
       setTodayRecord(null);
-      setLoadError('Thiếu tên nhân viên. Mở link có tham số ?name=... hoặc ?userId=...');
+      setTodaySessions([]);
+      setLoadError('Missing employee name. Open the link with ?name=... or ?userId=...');
       setLoading(false);
       return;
     }
@@ -44,7 +54,8 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
     if (isAnonymousUserId(employeeId) && !employeeName) {
       setProjects([]);
       setTodayRecord(null);
-      setLoadError('Không xác định được nhân viên. Mở link với ?name=...');
+      setTodaySessions([]);
+      setLoadError('Could not identify employee. Open the link with ?name=...');
       setLoading(false);
       return;
     }
@@ -57,24 +68,27 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
         ? employeeId
         : await resolveQueryUserId({ id: employeeId, name: employeeName });
 
-      const [projectRows, record] = await Promise.all([
+      const [projectRows, sessions] = await Promise.all([
         getProjectsForUser(resolvedId ?? employeeId, employeeName),
-        getTodayAttendance().catch(() => null),
+        getTodayAttendanceSessions().catch(() => [] as AttendanceDbRecord[]),
       ]);
 
-      setTodayRecord(record);
+      const active = sessions.find((row) => Boolean(row.check_in_at) && !row.check_out_at)
+        ?? await getActiveTodayAttendance().catch(() => null);
+      const latest = active ?? sessions[0] ?? null;
 
-      if (record?.check_out_at) {
-        setProjects([]);
-        setSelectedProductId('');
-        return;
-      }
+      setTodaySessions(sessions);
+      setTodayRecord(latest);
 
-      if (record?.check_in_at && record.project_id) {
-        const current = projectRows.find((project) => project.id === record.project_id)
+      const isWorking = Boolean(active?.check_in_at && !active?.check_out_at);
+      const doneIds = completedProjectIds(sessions);
+
+      // Đang làm việc: khóa đúng dự án hiện tại
+      if (isWorking && active?.project_id) {
+        const current = projectRows.find((project) => project.id === active.project_id)
           ?? {
-            id: record.project_id,
-            name: record.product_name ?? record.project_id,
+            id: active.project_id,
+            name: active.product_name ?? active.project_id,
             code: null,
             is_active: true,
             created_at: '',
@@ -86,14 +100,17 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
         return;
       }
 
-      setProjects(projectRows);
+      // Ẩn dự án đã check-in + check-out trong ngày
+      const available = projectRows.filter((project) => !doneIds.has(project.id));
+      setProjects(available);
       setSelectedProductId((current) => {
-        if (current && projectRows.some((project) => project.id === current)) return current;
-        return projectRows.length === 1 ? projectRows[0].id : '';
+        if (current && available.some((project) => project.id === current)) return current;
+        return available.length === 1 ? available[0].id : '';
       });
     } catch (err) {
       setProjects([]);
-      setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách dự án.');
+      setTodaySessions([]);
+      setLoadError(err instanceof Error ? err.message : 'Could not load project list.');
     } finally {
       setLoading(false);
     }
@@ -138,20 +155,24 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
     return () => window.removeEventListener(PROJECT_LOCATION_UPDATED_EVENT, handleUpdated);
   }, [selectedProductId, selectedProject?.name, loadProjectLocation]);
 
+  const isWorking = Boolean(todayRecord?.check_in_at && !todayRecord?.check_out_at);
+
+  const completedSessions = useMemo(
+    () => todaySessions.filter((row) => Boolean(row.check_in_at && row.check_out_at)),
+    [todaySessions],
+  );
+
   const selection = useMemo((): CheckInProductSelection | null => {
     const project = projects.find((p) => p.id === selectedProductId);
     if (!project) return null;
-    if (todayRecord?.check_out_at) return null;
+    if (isWorking) return null;
 
     return {
       projectId: project.id,
       projectName: project.name,
       locationName: checkInLocation?.name ?? project.name,
     };
-  }, [projects, selectedProductId, checkInLocation, todayRecord?.check_out_at]);
-
-  const checkedOutToday = Boolean(todayRecord?.check_out_at);
-  const checkedInToday = Boolean(todayRecord?.check_in_at && !todayRecord.check_out_at);
+  }, [projects, selectedProductId, checkInLocation, isWorking]);
 
   return {
     products: projects,
@@ -162,9 +183,11 @@ export function useProductCheckIn(employee?: (EmployeeIdentity & { resolving?: b
     officeLocation: checkInLocation,
     handleProductChange: setSelectedProductId,
     selection,
-    canCheckIn: Boolean(selection) && projects.length > 0 && !checkedOutToday,
-    checkedOutToday,
-    checkedInToday,
+    canCheckIn: Boolean(selection) && projects.length > 0 && !isWorking,
+    checkedOutToday: Boolean(todayRecord?.check_out_at) && !isWorking,
+    checkedInToday: isWorking,
+    todaySessions,
+    completedSessions,
     refreshProjects: loadData,
   };
 }

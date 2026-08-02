@@ -1,4 +1,4 @@
-interface UserAvatarProps {
+﻿interface UserAvatarProps {
   name: string;
   imageUrl?: string | null;
   size?: 'sm' | 'md' | 'lg';
@@ -26,7 +26,7 @@ export default function UserAvatar({ name, imageUrl, size = 'md', className = ''
 
   return (
     <div
-      className={`rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 ${sizeClasses[size]} ${className}`}
+      className={`rounded-full bg-red-100 text-red-800 font-bold flex items-center justify-center shrink-0 ${sizeClasses[size]} ${className}`}
     >
       {initial}
     </div>

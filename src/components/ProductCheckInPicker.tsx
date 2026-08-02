@@ -1,8 +1,8 @@
-import { Loader2 } from 'lucide-react';
+﻿import { Loader2 } from 'lucide-react';
 import type { ProductWithLocations } from '../types';
 
 const selectClass =
-  'w-full bg-white border border-outline-variant/25 rounded-xl py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:outline-none disabled:opacity-50';
+  'w-full bg-white border border-outline-variant/25 rounded-xl py-3 px-4 text-sm font-medium focus:ring-2 focus:ring-red-500/20 focus:outline-none disabled:opacity-50';
 
 interface ProductCheckInPickerProps {
   products: ProductWithLocations[];
@@ -21,13 +21,13 @@ export default function ProductCheckInPicker({
   selectedProductId,
   onProductChange,
   compact = false,
-  emptyMessage = 'Chưa có dự án nào gán bạn trong assignees. Kiểm tra tên trên link ?name=... khớp với assignees của dự án.',
+  emptyMessage = 'No projects assign you in assignees. Check that the ?name=... on the link matches the project assignees.',
 }: ProductCheckInPickerProps) {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-on-surface-variant py-2">
         <Loader2 size={16} className="animate-spin" />
-        Đang tải danh sách dự án...
+        Loading projects...
       </div>
     );
   }

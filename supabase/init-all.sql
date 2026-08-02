@@ -263,8 +263,7 @@ create table if not exists public.attendance_records (
   status text not null default 'not_checked_in'
     check (status in ('not_checked_in', 'working', 'checked_out')),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint attendance_records_employee_day_key unique (employee_id, work_date)
+  updated_at timestamptz not null default now()
 );
 
 -- Bổ sung cột nếu bảng đã tồn tại từ bản cũ
@@ -277,6 +276,10 @@ alter table public.attendance_records
   add column if not exists check_in_photo_url text,
   add column if not exists check_out_photo_url text;
 
+-- Nhiều phiên/ngày theo dự án; tối đa 1 phiên đang làm
+alter table public.attendance_records
+  drop constraint if exists attendance_records_employee_day_key;
+
 create index if not exists attendance_records_work_date_idx
   on public.attendance_records (work_date desc);
 create index if not exists attendance_records_employee_date_idx
@@ -285,6 +288,9 @@ create index if not exists attendance_records_project_id_idx
   on public.attendance_records (project_id, work_date desc);
 create index if not exists attendance_records_product_idx
   on public.attendance_records (product_id, work_date desc);
+create unique index if not exists attendance_records_one_active_per_day_idx
+  on public.attendance_records (employee_id, work_date)
+  where check_in_at is not null and check_out_at is null;
 
 drop trigger if exists set_attendance_records_updated_at on public.attendance_records;
 create trigger set_attendance_records_updated_at
